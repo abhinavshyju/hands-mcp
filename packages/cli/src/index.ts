@@ -66,7 +66,13 @@ program
   .action(async (opts) => {
     const rt = runtimeFromOpts(opts);
     ensureDir(rt.paths.home);
-    if (!rt.headless) {
+    // mcp-ide spawns this process with EDITER_CONTROL_SURFACE=http so native
+    // workbench views can decide via POST /api/approvals without a TTY.
+    if (process.env.EDITER_CONTROL_SURFACE === "http") {
+      rt.approvals.addSurface((req) => {
+        console.log(`\n[approval] ${req.summary}\n  id=${req.id}  (approve in MCP IDE)`);
+      });
+    } else if (!rt.headless) {
       rt.approvals.addSurface((req) => {
         console.log(`\n[approval] ${req.summary}\n  id=${req.id}  (open the UI to approve)`);
       });
