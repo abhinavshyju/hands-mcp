@@ -148,6 +148,7 @@ See [docs/TOOLS.md](docs/TOOLS.md) for the full tool reference.
 | [docs/SAFETY.md](docs/SAFETY.md) | Modes, jail, approvals, checkpoints |
 | [docs/PLUGINS.md](docs/PLUGINS.md) | Custom tools |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues |
+| [docs/GITHUB.md](docs/GITHUB.md) | Default branch and repo settings |
 | [docs/MCP-IDE.md](docs/MCP-IDE.md) | MCP IDE fork integration |
 | [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md) | Security notes |
 
