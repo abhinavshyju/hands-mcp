@@ -1,0 +1,17 @@
+node_modules
+dist
+build
+.turbo
+coverage
+*.log
+.env
+.env.*
+.DS_Store
+.editer
+apps/ui/dist
+packages/*/dist
+packages/server/ui
+.deploy
+*.tsbuildinfo
+.vscode
+.idea

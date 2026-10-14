@@ -1,0 +1,23 @@
+{
+  "name": "@editer/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "editer": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": ["dist"],
+  "description": "Local coding-agent MCP daemon (editer)",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@editer/core": "workspace:*",
+    "@editer/server": "workspace:*",
+    "@editer/shared": "workspace:*",
+    "@editer/tools": "workspace:*",
+    "commander": "^13.1.0"
+  }
+}

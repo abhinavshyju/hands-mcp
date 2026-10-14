@@ -1,0 +1,31 @@
+{
+  "name": "@editer/core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@editer/shared": "workspace:*",
+    "diff": "^7.0.0",
+    "fast-glob": "^3.3.3",
+    "ignore": "^7.0.0",
+    "playwright-core": "^1.55.0",
+    "sql.js": "^1.12.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.2",
+    "@types/sql.js": "^1.4.9"
+  }
+}
