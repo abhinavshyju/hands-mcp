@@ -13,6 +13,11 @@ import { createMcpServer, handleMcpHttp, type McpHttpSession } from "./mcp.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
+function isLoopbackIp(ip: string | undefined): boolean {
+  if (!ip) return false;
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
+
 function findUiDist(): string | undefined {
   const candidates = [
     path.resolve(process.cwd(), "apps/ui/dist"),
@@ -38,8 +43,11 @@ export async function startServer(runtime: EditerRuntime): Promise<StartedServer
   await plugins.loadAll();
   plugins.watch();
 
+  const httpLog = process.env.EDITER_HTTP_LOG === "1";
   const app = Fastify({
-    logger: true,
+    logger: httpLog
+      ? { level: process.env.EDITER_HTTP_LOG_LEVEL ?? "info" }
+      : false,
     trustProxy: true,
   });
 
@@ -48,6 +56,7 @@ export async function startServer(runtime: EditerRuntime): Promise<StartedServer
     max: runtime.merged().global.rateLimitMax,
     timeWindow: runtime.merged().global.rateLimitWindowMs,
     keyGenerator: (req) => req.ip,
+    allowList: (req) => isLoopbackIp(req.ip),
   });
 
   app.get("/healthz", async () => ({ ok: true, version: runtime.version() }));
@@ -69,12 +78,12 @@ export async function startServer(runtime: EditerRuntime): Promise<StartedServer
 
   registerControl(app, runtime, registry, plugins);
 
-  let closeRef: (() => Promise<void>) | undefined;
+  const shutdownState: { close?: () => Promise<void> } = {};
 
   app.post("/api/shutdown", async (_req, reply) => {
     reply.send({ ok: true });
     setImmediate(() => {
-      void closeRef?.().then(() => process.exit(0));
+      void shutdownState.close?.().then(() => process.exit(0));
     });
   });
 
@@ -110,7 +119,7 @@ export async function startServer(runtime: EditerRuntime): Promise<StartedServer
       }
     }
   };
-  closeRef = close;
+  shutdownState.close = close;
 
   if (!process.env.VITEST && !process.env.EDITER_CLI_OWNS_SHUTDOWN) {
     const shutdown = () => {

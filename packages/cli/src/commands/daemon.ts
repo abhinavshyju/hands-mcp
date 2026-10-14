@@ -71,6 +71,7 @@ async function attachToRunningDaemon(
       rt,
       localUrl: url,
       daemonClient: client,
+      daemonUp: true,
       onExit: async () => {
         await stopEditerDaemon(rt.paths);
       },
@@ -134,6 +135,7 @@ export async function runStart(opts: StartOpts): Promise<void> {
     await runInteractiveConsole({
       rt,
       localUrl: started.url,
+      daemonUp: true,
       onExit: async () => {
         detachApprovals();
         await started.close();

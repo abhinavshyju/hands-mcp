@@ -11,13 +11,21 @@ import {
 } from "@editer/core";
 import type { ApprovalResponse } from "@editer/core";
 import type { WorkspaceMode } from "@editer/shared";
-import { fetchAuditEvents, formatAuditLine, printAuditEvents } from "./log-view.js";
+import {
+  fetchAuditEvents,
+  formatMainActivityLine,
+  isMainActivityEvent,
+  printAuditEvents,
+  printMainActivityEvents,
+} from "./log-view.js";
 
 export interface ConsoleOptions {
   rt: EditerRuntime;
   localUrl: string;
   daemonClient?: DaemonClient;
   useDaemonOnly?: boolean;
+  /** Avoid /healthz on every poll when the daemon is already known to be up. */
+  daemonUp?: boolean;
   /** Called on /quit, q, or Ctrl+C — use to stop MCP server, tunnel, and child processes */
   onExit?: () => void | Promise<void>;
 }
@@ -33,7 +41,7 @@ const SLASH_COMMANDS: Array<{ cmd: string; usage: string; detail?: string }> = [
   { cmd: "/status", usage: "/status", detail: "Print daemon state (JSON)" },
   { cmd: "/open", usage: "/open", detail: "Open web UI in browser" },
   { cmd: "/workspace", usage: "/workspace <path>", detail: "Register and activate a folder" },
-  { cmd: "/logs", usage: "/logs [n|follow|off]", detail: "Show or tail audit activity" },
+  { cmd: "/logs", usage: "/logs [n|all|follow|off]", detail: "Show activity (default: edits/commands only)" },
   { cmd: "/help", usage: "/help [topic]", detail: "Show commands or /help mode" },
   { cmd: "/quit", usage: "/quit", detail: "Exit and stop MCP server, tunnel, and processes" },
 ];
@@ -98,7 +106,8 @@ function printConsoleHelp(topic?: string): void {
   if (topic === "logs") {
     console.log("\n  /logs           last 30 entries");
     console.log("  /logs 50        last 50 entries");
-    console.log("  /logs follow    stream new activity (default in console)");
+    console.log("  /logs follow    stream edits/commands (default in console)");
+    console.log("  /logs all 30    full audit log (verbose)");
     console.log("  /logs off       pause live log stream\n");
     return;
   }
@@ -117,8 +126,9 @@ function printConsoleHelp(topic?: string): void {
 }
 
 export async function runInteractiveConsole(opts: ConsoleOptions): Promise<void> {
-  const { rt, localUrl, useDaemonOnly } = opts;
+  const { rt, localUrl, useDaemonOnly, daemonUp = false } = opts;
   const client = opts.daemonClient ?? DaemonClient.fromPaths(rt.paths);
+  const auditOpts = { daemonUp };
   if (useDaemonOnly && !(await client.isRunning())) {
     throw new Error("Daemon is not running");
   }
@@ -133,10 +143,10 @@ export async function runInteractiveConsole(opts: ConsoleOptions): Promise<void>
   console.log("\nInteractive console — Tab completes commands. Type /help for suggestions.\n");
   printConsoleHelp();
 
-  console.log("--- recent activity ---");
-  const recent = await fetchAuditEvents(client, rt, { limit: 20 });
-  printAuditEvents(recent, true);
-  console.log("--- (live logs on; /logs off to pause) ---\n");
+  console.log("--- recent changes ---");
+  const recent = await fetchAuditEvents(client, rt, { limit: 40, ...auditOpts });
+  printMainActivityEvents(recent, true);
+  console.log("--- (live activity on; /logs off to pause, /logs all for verbose) ---\n");
 
   const shown = new Set<string>();
   const seenLogIds = new Set(recent.map((e) => e.id));
@@ -144,7 +154,8 @@ export async function runInteractiveConsole(opts: ConsoleOptions): Promise<void>
 
   const poll = async () => {
     try {
-      if (await client.isRunning()) {
+      const up = daemonUp || (await client.isRunning());
+      if (up) {
         const pending = (await client.approvals()).filter((a) => a.status === "pending");
         for (const req of pending) {
           if (shown.has(req.id)) continue;
@@ -152,12 +163,13 @@ export async function runInteractiveConsole(opts: ConsoleOptions): Promise<void>
           printApproval(req);
         }
       }
-      if (liveLogs) {
-        const events = await fetchAuditEvents(client, rt, { limit: 15 });
+      if (liveLogs && up) {
+        const events = await fetchAuditEvents(client, rt, { limit: 20, ...auditOpts });
         for (const e of events) {
           if (seenLogIds.has(e.id)) continue;
           seenLogIds.add(e.id);
-          console.log(`[log] ${formatAuditLine(e)}`);
+          if (!isMainActivityEvent(e)) continue;
+          console.log(formatMainActivityLine(e));
         }
       }
     } catch {
@@ -167,7 +179,7 @@ export async function runInteractiveConsole(opts: ConsoleOptions): Promise<void>
 
   const timer = setInterval(() => {
     void poll();
-  }, 500);
+  }, 1500);
   await poll();
 
   let exiting = false;
@@ -219,6 +231,7 @@ export async function runInteractiveConsole(opts: ConsoleOptions): Promise<void>
           liveLogs = v;
         },
         seenLogIds,
+        auditOpts,
       });
       if (!handled) {
         const suggestions = slashCompletions(line.split(/\s+/)[0] ?? line);
@@ -291,6 +304,7 @@ async function handleSlash(
     getLiveLogs: () => boolean;
     setLiveLogs: (v: boolean) => void;
     seenLogIds: Set<string>;
+    auditOpts: { daemonUp?: boolean };
   },
 ): Promise<boolean> {
   const parts = line.slice(1).split(/\s+/);
@@ -357,19 +371,22 @@ async function handleSlash(
     const arg = parts[1]?.toLowerCase();
     if (arg === "follow" || arg === "on") {
       logOpts.setLiveLogs(true);
-      console.log("Live log stream enabled.");
+      console.log("Live activity stream enabled.");
       return true;
     }
     if (arg === "off") {
       logOpts.setLiveLogs(false);
-      console.log("Live log stream paused. Use /logs follow to resume.");
+      console.log("Live activity paused. Use /logs follow to resume.");
       return true;
     }
-    const limit = arg && /^\d+$/.test(arg) ? Number(arg) : 30;
-    const events = await fetchAuditEvents(client, rt, { limit });
+    const verbose = arg === "all";
+    const limitToken = verbose ? parts[2] : parts[1];
+    const limit = limitToken && /^\d+$/.test(limitToken) ? Number(limitToken) : 30;
+    const events = await fetchAuditEvents(client, rt, { limit, ...logOpts.auditOpts });
     for (const e of events) logOpts.seenLogIds.add(e.id);
-    console.log(`--- last ${limit} log entries ---`);
-    printAuditEvents(events, true);
+    console.log(verbose ? `--- last ${limit} audit entries ---` : `--- last changes (up to ${limit} fetched) ---`);
+    if (verbose) printAuditEvents(events, true);
+    else printMainActivityEvents(events, true);
     return true;
   }
 
@@ -411,6 +428,7 @@ export async function runReviewCommand(rt: EditerRuntime, root: string, url?: st
     rt,
     localUrl,
     daemonClient: client,
+    daemonUp: true,
     useDaemonOnly: false,
     onExit: async () => {
       await stopEditerDaemon(rt.paths);
