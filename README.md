@@ -1,6 +1,6 @@
 # editer-mcp
 
-Bundled as a git submodule of **MCP IDE** (`/home/abhinav/mcp-ide`). The daemon is the hands; MCP IDE is a Code-OSS workbench that supervises it. Headless `editer start` still works without the IDE.
+Bundled as a git submodule of **MCP IDE**. The daemon is the hands; MCP IDE is a Code-OSS workbench that supervises it. Headless `editer start` still works without the IDE.
 
 A local coding-agent **MCP** daemon. Any MCP-capable chat client connects (optionally through a Cloudflare named tunnel) and gets Cursor-style tools — read, search, edit, run, git, background processes — executed on this machine. The chatbot is the brain; editer is the hands. There is no LLM inside the daemon.
 
