@@ -66,6 +66,13 @@ function slashCompletions(partial: string): string[] {
   return flat.filter((c) => c.startsWith(p));
 }
 
+function isReadlineAbort(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err.name === "AbortError" || (err as NodeJS.ErrnoException).code === "ABORT_ERR")
+  );
+}
+
 function consoleCompleter(line: string): [string[], string] {
   const trimmed = line.trimStart();
   if (trimmed.startsWith("/")) {
@@ -185,7 +192,16 @@ export async function runInteractiveConsole(opts: ConsoleOptions): Promise<void>
 
   try {
   while (true) {
-    const line = (await rl.question("editer> ")).trim();
+    let line: string;
+    try {
+      line = (await rl.question("editer> ")).trim();
+    } catch (err) {
+      if (isReadlineAbort(err) || exiting) {
+        if (!exiting) await exitSession("Interrupted.");
+        break;
+      }
+      throw err;
+    }
     if (!line) continue;
 
     if (line === "q" || line === "/quit" || line === "quit") {
