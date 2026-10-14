@@ -3,7 +3,9 @@ import {
   buildMcpConnect,
   diffCheckpoint,
   listCheckpoints,
+  loadGlobalConfig,
   restoreCheckpoint,
+  saveGlobalConfig,
   saveProjectConfig,
   type McpConnectClient,
 } from "@editer/core";
@@ -64,6 +66,46 @@ export function registerControl(
   );
 
   app.get("/api/config", async () => runtime.merged());
+
+  app.get("/api/config/global", async () => {
+    const cfg = loadGlobalConfig(runtime.paths);
+    return {
+      host: cfg.host,
+      port: cfg.port,
+      tunnel: cfg.tunnel,
+      exposeUiOverTunnel: cfg.exposeUiOverTunnel,
+      tokens: cfg.tokens.map((t) => ({ id: t.id, name: t.name, createdAt: t.createdAt, revokedAt: t.revokedAt })),
+      workspaces: cfg.workspaces,
+      activeWorkspaceId: cfg.activeWorkspaceId,
+    };
+  });
+
+  app.post("/api/config/tunnel", async (req) => {
+    const body = req.body as {
+      enabled?: boolean;
+      hostname?: string;
+      exposeUiOverTunnel?: boolean;
+    };
+    const cfg = loadGlobalConfig(runtime.paths);
+    if (body.enabled !== undefined) {
+      cfg.tunnel = { ...cfg.tunnel, enabled: body.enabled };
+    }
+    if (body.hostname !== undefined) {
+      cfg.tunnel = { ...cfg.tunnel, hostname: body.hostname.trim() || undefined };
+    }
+    if (body.exposeUiOverTunnel !== undefined) {
+      cfg.exposeUiOverTunnel = body.exposeUiOverTunnel;
+    }
+    saveGlobalConfig(runtime.paths, cfg);
+    return {
+      tunnel: runtime.tunnel.getState(),
+      global: {
+        tunnel: cfg.tunnel,
+        exposeUiOverTunnel: cfg.exposeUiOverTunnel,
+      },
+      note: "Restart the daemon (or disable --no-tunnel) for tunnel changes to take effect.",
+    };
+  });
 
   app.get("/api/mcp/connect", async (req, reply) => {
     const q = req.query as { client?: string };

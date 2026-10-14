@@ -63,9 +63,24 @@ program
   .option("--host <host>")
   .option("--port <port>")
   .option("--home <dir>")
-  .action(async (opts) => {
+  .option("--ensure-workspace <path>", "Register and activate this folder if missing")
+  .action(async (opts: {
+    home?: string;
+    headless?: boolean;
+    host?: string;
+    port?: string;
+    noTunnel?: boolean;
+    mode?: string;
+    ensureWorkspace?: string;
+  }) => {
     const rt = runtimeFromOpts(opts);
     ensureDir(rt.paths.home);
+    const ensurePath =
+      opts.ensureWorkspace?.trim() ||
+      process.env.EDITER_AUTO_WORKSPACE?.trim();
+    if (ensurePath) {
+      rt.workspaces.add(path.resolve(ensurePath));
+    }
     // mcp-ide spawns this process with EDITER_CONTROL_SURFACE=http so native
     // workbench views can decide via POST /api/approvals without a TTY.
     if (process.env.EDITER_CONTROL_SURFACE === "http") {

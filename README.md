@@ -47,7 +47,7 @@ pnpm editer -- tunnel setup
 pnpm editer -- start
 ```
 
-See [docs/TUNNEL.md](docs/TUNNEL.md), [docs/CONNECTORS.md](docs/CONNECTORS.md), [docs/TOOLS.md](docs/TOOLS.md), [docs/SAFETY.md](docs/SAFETY.md), [docs/PLUGINS.md](docs/PLUGINS.md).
+See [docs/TUNNEL.md](docs/TUNNEL.md), [docs/CONNECTORS.md](docs/CONNECTORS.md), [docs/TOOLS.md](docs/TOOLS.md), [docs/SAFETY.md](docs/SAFETY.md), [docs/PLUGINS.md](docs/PLUGINS.md), [docs/MCP-IDE.md](docs/MCP-IDE.md) (MCP IDE fork integration).
 
 ## Layout
 
