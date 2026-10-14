@@ -8,7 +8,7 @@ export interface PolicyInput {
   overrides?: Partial<Record<ToolGroup, PolicyAction>>;
 }
 
-const DEFAULTS: Record<WorkspaceMode, Record<"edit" | "exec" | "other", PolicyAction>> = {
+export const MODE_POLICY_DEFAULTS: Record<WorkspaceMode, Record<"edit" | "exec" | "other", PolicyAction>> = {
   readonly: { edit: "deny", exec: "deny", other: "allow" },
   review: { edit: "allow", exec: "approve", other: "allow" },
   auto: { edit: "allow", exec: "allow", other: "allow" },
@@ -33,7 +33,7 @@ export function resolvePolicy(input: PolicyInput): PolicyAction {
   if (override) return override;
   if (!input.mutating) return "allow";
   if (input.mode === "readonly") return "deny";
-  return DEFAULTS[input.mode][bucket(input.group, input.mutating)];
+  return MODE_POLICY_DEFAULTS[input.mode][bucket(input.group, input.mutating)];
 }
 
 export function assertAllowed(action: PolicyAction): void {

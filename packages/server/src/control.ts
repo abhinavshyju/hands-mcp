@@ -4,9 +4,12 @@ import {
   diffCheckpoint,
   listCheckpoints,
   loadGlobalConfig,
+  loadProjectConfig,
+  redactGlobalConfigForApi,
   restoreCheckpoint,
   saveGlobalConfig,
   saveProjectConfig,
+  setModeScoped,
   type McpConnectClient,
 } from "@editer/core";
 import type { EditerRuntime } from "@editer/core";
@@ -14,6 +17,7 @@ import type { ToolRegistry } from "@editer/tools";
 import type { PluginLoader } from "@editer/tools";
 import fs from "node:fs";
 import { unifiedDiff } from "@editer/core";
+import { globalConfigSchema, projectConfigSchema, type TunnelMode, type WorkspaceMode } from "@editer/shared";
 
 export function registerControl(
   app: FastifyInstance,
@@ -24,17 +28,20 @@ export function registerControl(
   app.get("/api/state", async () => {
     const ws = runtime.workspaces.getActive() ?? null;
     const tunnel = runtime.tunnel.getState();
+    const merged = runtime.merged();
     return {
       version: runtime.version(),
       host: runtime.host,
       port: runtime.port,
-      mode: runtime.merged().mode,
+      mode: merged.mode,
+      modeSource: merged.modeSource,
       workspace: ws,
       tunnel,
       clients: 0,
       toolCount: registry.list().length,
       headless: runtime.headless,
       pluginErrors: plugins.errors,
+      pendingApprovals: runtime.approvals.listPending().length,
     };
   });
 
@@ -50,10 +57,23 @@ export function registerControl(
   app.post("/api/workspaces/:id/activate", async (req) =>
     runtime.workspaces.setActive((req.params as { id: string }).id),
   );
+  app.post("/api/workspaces/:id/mode", async (req) => {
+    const body = req.body as { mode: WorkspaceMode };
+    const id = (req.params as { id: string }).id;
+    return runtime.workspaces.setMode(id, body.mode);
+  });
   app.post("/api/mode", async (req) => {
-    const body = req.body as { mode: "readonly" | "review" | "auto" };
-    const ws = runtime.workspace();
-    return runtime.workspaces.setMode(ws.id, body.mode);
+    const body = req.body as { mode: WorkspaceMode; scope?: "workspace" | "project"; workspaceId?: string };
+    const scope = body.scope ?? "workspace";
+    let ws = runtime.workspaces.getActive();
+    if (body.workspaceId) {
+      ws = runtime.workspaces.list().find((w) => w.id === body.workspaceId || w.name === body.workspaceId) ?? ws;
+    }
+    if (!ws) throw new Error("No workspace registered");
+    if (scope === "project") {
+      return setModeScoped(runtime.paths, body.mode, "project", ws);
+    }
+    return setModeScoped(runtime.paths, body.mode, "workspace", ws);
   });
 
   app.get("/api/tools", async () =>
@@ -67,44 +87,71 @@ export function registerControl(
 
   app.get("/api/config", async () => runtime.merged());
 
-  app.get("/api/config/global", async () => {
+  app.get("/api/config/global", async () => redactGlobalConfigForApi(loadGlobalConfig(runtime.paths)));
+
+  app.post("/api/config/global", async (req) => {
+    const body = req.body as Record<string, unknown>;
     const cfg = loadGlobalConfig(runtime.paths);
-    return {
-      host: cfg.host,
-      port: cfg.port,
-      tunnel: cfg.tunnel,
-      exposeUiOverTunnel: cfg.exposeUiOverTunnel,
-      tokens: cfg.tokens.map((t) => ({ id: t.id, name: t.name, createdAt: t.createdAt, revokedAt: t.revokedAt })),
-      workspaces: cfg.workspaces,
-      activeWorkspaceId: cfg.activeWorkspaceId,
-    };
+    const merged = { ...cfg, ...body };
+    const parsed = globalConfigSchema.parse(merged);
+    saveGlobalConfig(runtime.paths, parsed);
+    return redactGlobalConfigForApi(parsed);
   });
 
   app.post("/api/config/tunnel", async (req) => {
     const body = req.body as {
       enabled?: boolean;
+      mode?: TunnelMode;
       hostname?: string;
+      token?: string;
       exposeUiOverTunnel?: boolean;
     };
-    const cfg = loadGlobalConfig(runtime.paths);
-    if (body.enabled !== undefined) {
-      cfg.tunnel = { ...cfg.tunnel, enabled: body.enabled };
+    const patch: Parameters<typeof runtime.tunnel.applyConfig>[0] = {};
+    if (body.enabled !== undefined) patch.enabled = body.enabled;
+    if (body.mode !== undefined) {
+      patch.mode = body.mode;
+      patch.enabled = body.mode !== "off";
     }
-    if (body.hostname !== undefined) {
-      cfg.tunnel = { ...cfg.tunnel, hostname: body.hostname.trim() || undefined };
+    if (body.hostname !== undefined) patch.hostname = body.hostname.trim() || undefined;
+    if (body.token !== undefined) patch.token = body.token.trim() || undefined;
+    if (body.exposeUiOverTunnel !== undefined) patch.exposeUiOverTunnel = body.exposeUiOverTunnel;
+    await runtime.tunnel.applyConfig(patch);
+    if (!runtime.noTunnel) {
+      await runtime.tunnel.restart();
     }
-    if (body.exposeUiOverTunnel !== undefined) {
-      cfg.exposeUiOverTunnel = body.exposeUiOverTunnel;
-    }
-    saveGlobalConfig(runtime.paths, cfg);
     return {
       tunnel: runtime.tunnel.getState(),
-      global: {
-        tunnel: cfg.tunnel,
-        exposeUiOverTunnel: cfg.exposeUiOverTunnel,
-      },
-      note: "Restart the daemon (or disable --no-tunnel) for tunnel changes to take effect.",
+      global: redactGlobalConfigForApi(loadGlobalConfig(runtime.paths)).tunnel,
     };
+  });
+
+  app.post("/api/tunnel/start", async () => {
+    await runtime.tunnel.start();
+    return { tunnel: runtime.tunnel.getState() };
+  });
+
+  app.post("/api/tunnel/stop", async () => {
+    await runtime.tunnel.stop();
+    return { tunnel: runtime.tunnel.getState() };
+  });
+
+  app.post("/api/tunnel/restart", async () => {
+    await runtime.tunnel.restart();
+    return { tunnel: runtime.tunnel.getState() };
+  });
+
+  app.post("/api/tunnel/quick", async () => {
+    await runtime.tunnel.applyConfig({ mode: "quick", enabled: true });
+    await runtime.tunnel.restart();
+    return { tunnel: runtime.tunnel.getState() };
+  });
+
+  app.get("/api/tunnel/health", async () => {
+    const st = runtime.tunnel.getState();
+    const host = st.quickUrl?.replace(/^https:\/\//, "") ?? st.hostname;
+    if (!host) return { ok: false, reason: "no hostname" };
+    const ok = await runtime.tunnel.verifyPublicHealth(host);
+    return { ok };
   });
 
   app.get("/api/mcp/connect", async (req, reply) => {
@@ -121,10 +168,9 @@ export function registerControl(
   });
   app.post("/api/config/project", async (req) => {
     const body = req.body as Record<string, unknown>;
-    saveProjectConfig(runtime.workspace().root, {
-      ...runtime.projectConfig(),
-      ...body,
-    });
+    const ws = runtime.workspace();
+    const next = projectConfigSchema.parse({ ...loadProjectConfig(ws.root), ...body });
+    saveProjectConfig(ws.root, next);
     return runtime.merged();
   });
 
@@ -181,6 +227,11 @@ export function registerControl(
   });
 
   app.get("/api/approvals", async () => runtime.approvals.listPending());
+  app.post("/api/approvals/decide-all", async (req) => {
+    const body = req.body as { approved: boolean; reason?: string };
+    const count = runtime.approvals.decideAll(body.approved, body.reason);
+    return { count };
+  });
   app.post("/api/approvals/:id", async (req) => {
     const body = req.body as { approved: boolean; reason?: string };
     return runtime.approvals.decide((req.params as { id: string }).id, body.approved, body.reason);

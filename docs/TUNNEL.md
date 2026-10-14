@@ -1,45 +1,70 @@
-# Cloudflare named tunnel
+# Cloudflare tunnel
 
-editer-mcp publishes MCP at a stable hostname using a **named** Cloudflare tunnel (not a quick `trycloudflare.com` URL).
+editer supports four tunnel modes (stored in `~/.editer/config.json` under `tunnel.mode`):
 
-## Prerequisites
+| Mode | Use case |
+|------|----------|
+| `off` | Local only |
+| `quick` | Ephemeral `*.trycloudflare.com` URL (no account setup) |
+| `token` | `cloudflared tunnel run --token …` (Dashboard-created tunnel) |
+| `named` | Local credentials + `config.yml` from `editer tunnel setup` |
+
+## Quick tunnel (trycloudflare)
+
+```bash
+editer tunnel quick
+# or start a session with:
+editer . --tunnel-quick
+```
+
+The public MCP URL appears in logs and in the web UI when cloudflared prints the URL.
+
+## Token tunnel
+
+```bash
+editer tunnel token <your-token> --hostname editer.example.com
+editer tunnel restart
+```
+
+## Named tunnel (stable hostname)
+
+Prerequisites:
 
 - A Cloudflare account and a domain on that account
 - Permission to create a tunnel and a DNS CNAME
 
-## Setup
-
 ```bash
-pnpm editer -- tunnel setup
+editer tunnel setup
 ```
 
-The wizard:
-
-1. Ensures a `cloudflared` binary (`PATH` or download into `~/.editer/bin`)
-2. Runs `cloudflared tunnel login`
-3. Creates a named tunnel
-4. Asks for a hostname
-5. Writes `~/.editer/tunnel/config.yml`
-6. Routes DNS
-7. Stores tunnel settings in `~/.editer/config.json`
-
-After that, `editer start` supervises `cloudflared` as a child process and reconnects with backoff if it drops.
+The wizard ensures `cloudflared`, runs login, creates a named tunnel, writes `~/.editer/tunnel/config.yml`, and stores settings in global config.
 
 MCP URL:
 
 ```
 https://<hostname>/mcp
-Authorization: Bearer <token>
 ```
+
+## Live control
+
+Tunnel mode, hostname, and token can be changed without restarting the whole daemon:
+
+```bash
+editer tunnel set --mode quick
+editer tunnel enable|disable|restart
+editer tunnel status --check
+```
+
+Or use the **Cloudflare tunnel** section in the web UI (MCP config drawer).
 
 ## Hardening
 
-- Unauthenticated requests are rejected (401).
-- The editor UI is **loopback-only** unless `exposeUiOverTunnel` is set true in `~/.editer/config.json`.
-- Put [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/) in front of the hostname so identity is enforced before our bearer token.
+- The editor UI is **loopback-only** unless `exposeUiOverTunnel` is enabled (CLI or UI).
+- Put [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/) in front of public hostnames when exposing MCP.
 
 ## Disable for a single run
 
 ```bash
 editer start --no-tunnel
+editer . --no-tunnel
 ```

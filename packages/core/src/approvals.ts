@@ -108,6 +108,14 @@ export class ApprovalManager {
     return this.finish(id, status, reason);
   }
 
+  decideAll(approved: boolean, reason?: string): number {
+    const ids = [...this.pending.keys()];
+    for (const id of ids) {
+      this.decide(id, approved, reason);
+    }
+    return ids.length;
+  }
+
   private finish(
     id: string,
     status: "approved" | "rejected" | "timeout",

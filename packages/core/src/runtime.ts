@@ -118,6 +118,6 @@ export class EditerRuntime {
   }
 
   mergeFor(ws: WorkspaceRecord): MergedConfig {
-    return mergeConfig(this.merged().global, loadProjectConfig(ws.root), ws.mode);
+    return mergeConfig(this.merged().global, loadProjectConfig(ws.root), ws.mode, this.modeOverride);
   }
 }

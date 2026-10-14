@@ -39,14 +39,23 @@ export const workspaceRecordSchema = z.object({
 });
 export type WorkspaceRecord = z.infer<typeof workspaceRecordSchema>;
 
+export const tunnelModeSchema = z.enum(["off", "quick", "token", "named"]);
+export type TunnelMode = z.infer<typeof tunnelModeSchema>;
+
 export const tunnelConfigSchema = z.object({
   enabled: z.boolean().default(false),
+  mode: tunnelModeSchema.default("off"),
   hostname: z.string().optional(),
   tunnelName: z.string().optional(),
   credentialsFile: z.string().optional(),
   configFile: z.string().optional(),
+  token: z.string().optional(),
+  quickUrl: z.string().optional(),
 });
 export type TunnelConfig = z.infer<typeof tunnelConfigSchema>;
+
+export const modeSourceSchema = z.enum(["override", "project", "workspace", "default"]);
+export type ModeSource = z.infer<typeof modeSourceSchema>;
 
 export const toolGroupOverridesSchema = z
   .record(toolGroupSchema, policyActionSchema)
@@ -88,6 +97,7 @@ export const mergedConfigSchema = z.object({
   global: globalConfigSchema,
   project: projectConfigSchema,
   mode: workspaceModeSchema,
+  modeSource: modeSourceSchema,
   denylist: z.array(z.string()),
   scripts: z.object({
     test: z.string().optional(),
@@ -167,21 +177,29 @@ export const processRecordSchema = z.object({
 });
 export type ProcessRecord = z.infer<typeof processRecordSchema>;
 
+export const tunnelStateSchema = z.object({
+  enabled: z.boolean(),
+  mode: tunnelModeSchema.optional(),
+  hostname: z.string().optional(),
+  quickUrl: z.string().optional(),
+  healthy: z.boolean(),
+  status: z.string(),
+  lastError: z.string().optional(),
+});
+export type TunnelStateSnapshot = z.infer<typeof tunnelStateSchema>;
+
 export const daemonStateSchema = z.object({
   version: z.string(),
   host: z.string(),
   port: z.number(),
   mode: workspaceModeSchema,
+  modeSource: modeSourceSchema,
   workspace: workspaceRecordSchema.nullable(),
-  tunnel: z.object({
-    enabled: z.boolean(),
-    hostname: z.string().optional(),
-    healthy: z.boolean(),
-    status: z.string(),
-  }),
+  tunnel: tunnelStateSchema,
   clients: z.number(),
   toolCount: z.number(),
   headless: z.boolean(),
+  pendingApprovals: z.number().default(0),
 });
 export type DaemonState = z.infer<typeof daemonStateSchema>;
 

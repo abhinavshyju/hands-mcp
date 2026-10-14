@@ -11,15 +11,41 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+export type ModeSource = "override" | "project" | "workspace" | "default";
+export type TunnelMode = "off" | "quick" | "token" | "named";
+
 export interface DaemonState {
   version: string;
   host: string;
   port: number;
   mode: string;
+  modeSource: ModeSource;
   workspace: { id: string; name: string; root: string; mode: string } | null;
-  tunnel: { enabled: boolean; hostname?: string; healthy: boolean; status: string };
+  tunnel: {
+    enabled: boolean;
+    mode?: TunnelMode;
+    hostname?: string;
+    quickUrl?: string;
+    healthy: boolean;
+    status: string;
+    lastError?: string;
+  };
   toolCount: number;
   headless: boolean;
+  pendingApprovals: number;
+}
+
+export interface GlobalConfigView {
+  host: string;
+  port: number;
+  tunnel: {
+    enabled: boolean;
+    mode?: TunnelMode;
+    hostname?: string;
+    tokenSet?: boolean;
+    quickUrl?: string;
+  };
+  exposeUiOverTunnel: boolean;
 }
 
 export interface TreeEntry {

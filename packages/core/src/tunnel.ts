@@ -2,17 +2,52 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
-import { APP_NAME } from "@editer/shared";
+import { APP_NAME, type TunnelConfig, type TunnelMode } from "@editer/shared";
 import type { EditerPaths } from "./paths.js";
 import { ensureDir } from "./paths.js";
 import type { EventBus } from "./events.js";
-import { loadGlobalConfig } from "./config.js";
+import { loadGlobalConfig, saveGlobalConfig } from "./config.js";
 
 export interface TunnelState {
   enabled: boolean;
+  mode?: TunnelMode;
   hostname?: string;
+  quickUrl?: string;
   healthy: boolean;
   status: string;
+  lastError?: string;
+}
+
+export function parseQuickTunnelUrl(text: string): string | undefined {
+  const m = text.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
+  return m?.[0];
+}
+
+export function effectiveTunnelMode(cfg: TunnelConfig): TunnelMode {
+  if (cfg.mode && cfg.mode !== "off") return cfg.mode;
+  if (cfg.enabled) return "named";
+  return "off";
+}
+
+export function buildCloudflaredArgs(cfg: TunnelConfig, localPort: number): string[] {
+  const mode = effectiveTunnelMode(cfg);
+  if (mode === "quick") {
+    return ["tunnel", "--url", `http://127.0.0.1:${localPort}`];
+  }
+  if (mode === "token") {
+    if (!cfg.token) throw new Error("Tunnel token not configured");
+    return ["tunnel", "run", "--token", cfg.token];
+  }
+  if (mode === "named") {
+    if (cfg.configFile && fs.existsSync(cfg.configFile)) {
+      return ["tunnel", "--config", cfg.configFile, "run"];
+    }
+    if (cfg.tunnelName) {
+      return ["tunnel", "run", cfg.tunnelName];
+    }
+    throw new Error("Named tunnel not configured (run editer tunnel setup)");
+  }
+  throw new Error("Tunnel is off");
 }
 
 export class TunnelSupervisor {
@@ -56,43 +91,86 @@ export class TunnelSupervisor {
     return dest;
   }
 
+  async applyConfig(patch: Partial<TunnelConfig> & { exposeUiOverTunnel?: boolean }): Promise<TunnelState> {
+    const cfg = loadGlobalConfig(this.paths);
+    if (patch.exposeUiOverTunnel !== undefined) {
+      cfg.exposeUiOverTunnel = patch.exposeUiOverTunnel;
+    }
+    const nextTunnel = { ...cfg.tunnel, ...patch };
+    if (patch.mode !== undefined) {
+      nextTunnel.enabled = patch.mode !== "off";
+    }
+    cfg.tunnel = nextTunnel;
+    saveGlobalConfig(this.paths, cfg);
+    return this.getState();
+  }
+
+  async restart(): Promise<void> {
+    await this.stop();
+    await this.start();
+  }
+
   async start(): Promise<void> {
     const cfg = loadGlobalConfig(this.paths);
-    if (!cfg.tunnel.enabled) {
-      this.state = { enabled: false, healthy: false, status: "disabled" };
+    const mode = effectiveTunnelMode(cfg.tunnel);
+    if (mode === "off") {
+      this.state = { enabled: false, mode: "off", healthy: false, status: "disabled" };
       this.events.emit("tunnel.status", this.state);
       return;
     }
     this.stopping = false;
-    const bin = await this.ensureBinary();
-    const args: string[] = ["tunnel"];
-    if (cfg.tunnel.configFile && fs.existsSync(cfg.tunnel.configFile)) {
-      args.push("--config", cfg.tunnel.configFile, "run");
-    } else if (cfg.tunnel.tunnelName) {
-      args.push("run", cfg.tunnel.tunnelName);
-    } else {
-      this.state = { enabled: true, healthy: false, status: "not-configured" };
+    let bin: string;
+    let args: string[];
+    try {
+      bin = await this.ensureBinary();
+      args = buildCloudflaredArgs(cfg.tunnel, this.localPort);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.state = {
+        enabled: true,
+        mode,
+        hostname: cfg.tunnel.hostname,
+        healthy: false,
+        status: "not-configured",
+        lastError: msg,
+      };
       this.events.emit("tunnel.status", this.state);
       return;
     }
     this.state = {
       enabled: true,
+      mode,
       hostname: cfg.tunnel.hostname,
+      quickUrl: cfg.tunnel.quickUrl,
       healthy: false,
       status: "starting",
     };
     this.events.emit("tunnel.status", this.state);
-    this.spawnLoop(bin, args);
+    this.spawnLoop(bin, args, mode);
   }
 
-  private spawnLoop(bin: string, args: string[], attempt = 0): void {
+  private spawnLoop(bin: string, args: string[], mode: TunnelMode, attempt = 0): void {
     if (this.stopping) return;
     const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
     this.child = child;
     const onOut = (d: Buffer) => {
       const text = d.toString("utf8");
       if (/Registered tunnel connection|connIndex/.test(text)) {
-        this.state = { ...this.state, healthy: true, status: "connected" };
+        this.state = { ...this.state, healthy: true, status: "connected", lastError: undefined };
+        this.events.emit("tunnel.status", this.state);
+      }
+      if (mode === "quick") {
+        const url = parseQuickTunnelUrl(text);
+        if (url) {
+          this.state = { ...this.state, quickUrl: url, hostname: url.replace(/^https:\/\//, ""), healthy: true, status: "connected" };
+          this.events.emit("tunnel.status", this.state);
+          const cfg = loadGlobalConfig(this.paths);
+          cfg.tunnel = { ...cfg.tunnel, quickUrl: url, hostname: url.replace(/^https:\/\//, "") };
+          saveGlobalConfig(this.paths, cfg);
+        }
+      }
+      if (/error|ERR|failed/i.test(text) && !/level=error/i.test(text)) {
+        this.state = { ...this.state, lastError: text.trim().slice(0, 500) };
         this.events.emit("tunnel.status", this.state);
       }
     };
@@ -103,7 +181,7 @@ export class TunnelSupervisor {
       this.events.emit("tunnel.status", this.state);
       if (!this.stopping) {
         const delay = Math.min(30_000, 1000 * 2 ** attempt);
-        setTimeout(() => this.spawnLoop(bin, args, attempt + 1), delay);
+        setTimeout(() => this.spawnLoop(bin, args, mode, attempt + 1), delay);
       }
     });
   }

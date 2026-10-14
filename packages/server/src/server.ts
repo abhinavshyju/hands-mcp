@@ -69,6 +69,15 @@ export async function startServer(runtime: EditerRuntime): Promise<StartedServer
 
   registerControl(app, runtime, registry, plugins);
 
+  let closeRef: (() => Promise<void>) | undefined;
+
+  app.post("/api/shutdown", async (_req, reply) => {
+    reply.send({ ok: true });
+    setImmediate(() => {
+      void closeRef?.().then(() => process.exit(0));
+    });
+  });
+
   const uiDist = runtime.headless ? undefined : findUiDist();
   if (uiDist) {
     await app.register(staticPlugin, { root: uiDist, prefix: "/", wildcard: false });
@@ -93,9 +102,17 @@ export async function startServer(runtime: EditerRuntime): Promise<StartedServer
     await runtime.browser.stopAll();
     await runtime.tunnel.stop();
     await app.close();
+    if (fs.existsSync(runtime.paths.pidFile)) {
+      try {
+        fs.unlinkSync(runtime.paths.pidFile);
+      } catch {
+        // ignore
+      }
+    }
   };
+  closeRef = close;
 
-  if (!process.env.VITEST) {
+  if (!process.env.VITEST && !process.env.EDITER_CLI_OWNS_SHUTDOWN) {
     const shutdown = () => {
       void close().then(() => process.exit(0));
     };

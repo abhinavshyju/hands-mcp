@@ -1,5 +1,6 @@
 export * from "./paths.js";
 export * from "./config.js";
+export * from "./client.js";
 export * from "./workspaces.js";
 export * from "./jail.js";
 export * from "./audit.js";

@@ -14,6 +14,9 @@ import {
   type BrowserSessionInfo,
   type Proc,
   type TreeEntry,
+  type GlobalConfigView,
+  type TunnelMode,
+  type ModeSource,
 } from "./api.js";
 
 interface Workspace {
@@ -45,6 +48,12 @@ export function App() {
   const [mcpConnect, setMcpConnect] = useState<McpConnectInfo | null>(null);
   const [mcpError, setMcpError] = useState<string | null>(null);
   const [mcpCopied, setMcpCopied] = useState(false);
+  const [modeScope, setModeScope] = useState<"workspace" | "project">("workspace");
+  const [showWorkspaces, setShowWorkspaces] = useState(false);
+  const [globalCfg, setGlobalCfg] = useState<GlobalConfigView | null>(null);
+  const [tunnelToken, setTunnelToken] = useState("");
+  const [tunnelHostname, setTunnelHostname] = useState("");
+  const [tunnelModeUi, setTunnelModeUi] = useState<TunnelMode>("off");
   const termRef = useRef<HTMLDivElement | null>(null);
   const term = useRef<Terminal | null>(null);
   const fit = useRef<FitAddon | null>(null);
@@ -67,6 +76,7 @@ export function App() {
         setTree([]);
         setCheckpoints([]);
       }
+      setGlobalCfg(await api<GlobalConfigView>("/api/config/global").catch(() => null));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -90,7 +100,10 @@ export function App() {
   useEffect(() => {
     if (!showMcp) return;
     void loadMcpConnect(mcpClient);
-  }, [showMcp, mcpClient, loadMcpConnect]);
+    if (state?.tunnel.mode) setTunnelModeUi(state.tunnel.mode);
+    else if (globalCfg?.tunnel.mode) setTunnelModeUi(globalCfg.tunnel.mode);
+    setTunnelHostname(state?.tunnel.hostname ?? globalCfg?.tunnel.hostname ?? "");
+  }, [showMcp, mcpClient, loadMcpConnect, state?.tunnel, globalCfg]);
 
   useEffect(() => {
     if (!termRef.current || term.current) return;
@@ -198,7 +211,44 @@ export function App() {
   }
 
   async function setMode(mode: string) {
-    await api("/api/mode", { method: "POST", body: JSON.stringify({ mode }) });
+    await api("/api/mode", { method: "POST", body: JSON.stringify({ mode, scope: modeScope }) });
+    await refresh();
+  }
+
+  async function setWorkspaceMode(id: string, mode: string) {
+    await api(`/api/workspaces/${id}/mode`, { method: "POST", body: JSON.stringify({ mode }) });
+    await refresh();
+  }
+
+  async function removeWorkspace(id: string) {
+    await api(`/api/workspaces/${id}`, { method: "DELETE" });
+    await refresh();
+  }
+
+  async function approveAll() {
+    await api("/api/approvals/decide-all", {
+      method: "POST",
+      body: JSON.stringify({ approved: true, reason: "ui-all" }),
+    });
+    setApprovals(await api<Approval[]>("/api/approvals"));
+  }
+
+  async function applyTunnelConfig() {
+    await api("/api/config/tunnel", {
+      method: "POST",
+      body: JSON.stringify({
+        mode: tunnelModeUi,
+        hostname: tunnelHostname || undefined,
+        token: tunnelToken || undefined,
+        enabled: tunnelModeUi !== "off",
+      }),
+    });
+    setTunnelToken("");
+    await refresh();
+  }
+
+  async function tunnelAction(action: "start" | "stop" | "restart" | "quick") {
+    await api(`/api/tunnel/${action}`, { method: "POST", body: "{}" });
     await refresh();
   }
 
@@ -214,6 +264,12 @@ export function App() {
     [audit, filter],
   );
   const pending = approvals.filter((a) => a.status === "pending");
+  const modeSource = (state?.modeSource ?? "default") as ModeSource;
+  const publicMcpUrl = state?.tunnel.quickUrl
+    ? `${state.tunnel.quickUrl}/mcp`
+    : state?.tunnel.hostname
+      ? `https://${state.tunnel.hostname}/mcp`
+      : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -249,8 +305,26 @@ export function App() {
           <button className="rounded bg-zinc-800 px-2 py-1" onClick={() => void addWorkspace()}>
             Add
           </button>
+          <button
+            className="rounded bg-zinc-800 px-2 py-1"
+            onClick={() => setShowWorkspaces((v) => !v)}
+          >
+            Workspaces
+          </button>
+          {pending.length > 0 ? (
+            <span className="rounded bg-amber-800 px-2 py-0.5 text-amber-100">{pending.length} pending</span>
+          ) : null}
         </div>
         <div className="flex items-center gap-3 text-zinc-400">
+          <select
+            className="bg-zinc-900 px-2 py-1 text-xs"
+            value={modeScope}
+            onChange={(e) => setModeScope(e.target.value as "workspace" | "project")}
+            title="Mode write scope"
+          >
+            <option value="workspace">scope: workspace</option>
+            <option value="project">scope: project file</option>
+          </select>
           <select
             className="bg-zinc-900 px-2 py-1"
             value={state?.mode ?? "review"}
@@ -260,6 +334,7 @@ export function App() {
             <option value="review">review — approve shell</option>
             <option value="auto">auto — no approvals</option>
           </select>
+          <span className="text-xs text-zinc-500">from {modeSource}</span>
           <span>
             tunnel {state?.tunnel.status ?? "—"}
             {state?.tunnel.hostname ? ` ${state.tunnel.hostname}` : ""}
@@ -276,6 +351,42 @@ export function App() {
           </button>
         </div>
       </header>
+
+      {state?.mode === "auto" ? (
+        <div className="z-20 shrink-0 border-b border-amber-700 bg-amber-950/50 px-4 py-1 text-xs text-amber-200">
+          Auto mode — mutating tools run without approval. Switch to review for guarded exec.
+        </div>
+      ) : null}
+
+      {showWorkspaces ? (
+        <div className="z-20 shrink-0 border-b border-zinc-800 bg-zinc-950/80 px-4 py-3 text-sm">
+          <div className="mb-2 font-medium text-zinc-200">Workspaces</div>
+          {workspaces.map((w) => (
+            <div key={w.id} className="mb-2 flex flex-wrap items-center gap-2 border-b border-zinc-900 pb-2">
+              <span className={state?.workspace?.id === w.id ? "text-emerald-400" : "text-zinc-400"}>
+                {state?.workspace?.id === w.id ? "●" : "○"}
+              </span>
+              <span className="font-medium">{w.name}</span>
+              <span className="truncate text-xs text-zinc-500">{w.root}</span>
+              <select
+                className="bg-zinc-900 px-2 py-1 text-xs"
+                value={w.mode}
+                onChange={(e) => void setWorkspaceMode(w.id, e.target.value)}
+              >
+                <option value="readonly">readonly</option>
+                <option value="review">review</option>
+                <option value="auto">auto</option>
+              </select>
+              <button className="rounded bg-zinc-800 px-2 py-1 text-xs" onClick={() => void activate(w.id)}>
+                Activate
+              </button>
+              <button className="rounded bg-red-900 px-2 py-1 text-xs" onClick={() => void removeWorkspace(w.id)}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {showMcp ? (
         <div className="z-20 shrink-0 border-b border-zinc-800 bg-zinc-950/80 px-4 py-3 text-sm">
@@ -331,6 +442,78 @@ export function App() {
           <pre className="mt-2 max-h-48 overflow-auto rounded border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-200">
             {mcpConnect?.pasteText ?? (mcpError ? "—" : "Loading…")}
           </pre>
+          <div className="mt-4 border-t border-zinc-800 pt-3">
+            <div className="mb-2 font-medium text-zinc-200">Cloudflare tunnel</div>
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+              <span className={state?.tunnel.healthy ? "text-emerald-400" : "text-zinc-500"}>
+                {state?.tunnel.status ?? "—"}
+                {state?.tunnel.lastError ? ` — ${state.tunnel.lastError.slice(0, 80)}` : ""}
+              </span>
+              {publicMcpUrl ? (
+                <button
+                  type="button"
+                  className="text-sky-400"
+                  onClick={() => void navigator.clipboard.writeText(publicMcpUrl)}
+                >
+                  copy public MCP
+                </button>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <select
+                className="bg-zinc-900 px-2 py-1 text-xs"
+                value={tunnelModeUi}
+                onChange={(e) => setTunnelModeUi(e.target.value as TunnelMode)}
+              >
+                <option value="off">off</option>
+                <option value="quick">quick (trycloudflare)</option>
+                <option value="token">token</option>
+                <option value="named">named</option>
+              </select>
+              <input
+                className="w-48 bg-zinc-900 px-2 py-1 text-xs"
+                placeholder="hostname"
+                value={tunnelHostname}
+                onChange={(e) => setTunnelHostname(e.target.value)}
+              />
+              <input
+                className="w-48 bg-zinc-900 px-2 py-1 text-xs"
+                placeholder={globalCfg?.tunnel.tokenSet ? "token (set)" : "tunnel token"}
+                value={tunnelToken}
+                onChange={(e) => setTunnelToken(e.target.value)}
+              />
+              <label className="flex items-center gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  checked={globalCfg?.exposeUiOverTunnel ?? false}
+                  onChange={(e) =>
+                    void api("/api/config/tunnel", {
+                      method: "POST",
+                      body: JSON.stringify({ exposeUiOverTunnel: e.target.checked }),
+                    }).then(() => refresh())
+                  }
+                />
+                expose UI
+              </label>
+              <button type="button" className="rounded bg-zinc-800 px-2 py-1 text-xs" onClick={() => void applyTunnelConfig()}>
+                Save
+              </button>
+              <button type="button" className="rounded bg-zinc-800 px-2 py-1 text-xs" onClick={() => void tunnelAction("quick")}>
+                Quick
+              </button>
+              <button type="button" className="rounded bg-zinc-800 px-2 py-1 text-xs" onClick={() => void tunnelAction("restart")}>
+                Restart
+              </button>
+              <button type="button" className="rounded bg-zinc-800 px-2 py-1 text-xs" onClick={() => void tunnelAction("stop")}>
+                Stop
+              </button>
+            </div>
+            {state?.tunnel.quickUrl ? (
+              <div className="mt-2 text-xs text-zinc-400">
+                Public: <span className="text-zinc-200">{publicMcpUrl}</span>
+              </div>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -343,34 +526,41 @@ export function App() {
         </div>
       ) : null}
 
-      {pending[0] ? (
-        <div className="z-20 shrink-0 border-b border-amber-700 bg-amber-950/40 p-3">
+      {pending.length > 0 ? (
+        <div className="z-20 max-h-56 shrink-0 overflow-auto border-b border-amber-700 bg-amber-950/40 p-3">
           <div className="mb-2 flex items-center justify-between">
-            <div>
-              <div className="text-amber-200">Approval needed ({pending.length})</div>
-              <div className="text-sm">{pending[0].summary}</div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                className="rounded bg-emerald-700 px-3 py-1"
-                onClick={() => void decide(pending[0]!.id, true)}
-              >
-                Approve
-              </button>
-              <button
-                className="rounded bg-red-800 px-3 py-1"
-                onClick={() => void decide(pending[0]!.id, false)}
-              >
-                Reject
-              </button>
-            </div>
+            <div className="text-amber-200">Approvals ({pending.length})</div>
+            <button className="rounded bg-emerald-800 px-2 py-1 text-xs" onClick={() => void approveAll()}>
+              Approve all
+            </button>
           </div>
-          {pending[0].command ? (
-            <pre className="overflow-auto text-xs text-zinc-300">{pending[0].command}</pre>
-          ) : null}
-          {pending[0].preview ? (
-            <pre className="max-h-40 overflow-auto text-xs text-zinc-400">{pending[0].preview}</pre>
-          ) : null}
+          {pending.map((req) => (
+            <div key={req.id} className="mb-3 border-b border-amber-900/50 pb-2 last:border-0">
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-sm">
+                  <span className="text-zinc-400">{req.tool}</span> {req.summary}
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button className="rounded bg-emerald-700 px-2 py-1 text-xs" onClick={() => void decide(req.id, true)}>
+                    Approve
+                  </button>
+                  <button className="rounded bg-red-800 px-2 py-1 text-xs" onClick={() => void decide(req.id, false)}>
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    className="text-sky-400 text-xs"
+                    onClick={() => setDiffText(req.diff ?? req.preview ?? "")}
+                  >
+                    diff
+                  </button>
+                </div>
+              </div>
+              {req.command ? (
+                <pre className="mt-1 overflow-auto text-xs text-zinc-300">{req.command}</pre>
+              ) : null}
+            </div>
+          ))}
         </div>
       ) : null}
 
