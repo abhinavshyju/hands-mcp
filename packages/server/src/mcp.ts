@@ -21,9 +21,10 @@ import type { HandsRuntime } from "@hands/core";
 import { getAuthContext } from "@hands/core";
 import { globSearch } from "@hands/core";
 import { splitToolResult, type ToolRegistry } from "@hands/tools";
+import type { HandsPaths } from "@hands/core";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "node:fs";
-import { randomUUID } from "node:crypto";
+import { applyMcpCorsHeaders, mcpStreamableHttpTransportOptions } from "./mcpHttpConfig.js";
 
 export interface CreatedMcpServer {
   server: Server;
@@ -219,10 +220,12 @@ function sendJsonRpcError(
 export async function handleMcpHttp(
   createServer: () => CreatedMcpServer,
   sessions: Map<string, McpHttpSession>,
+  paths: HandsPaths,
   req: IncomingMessage,
   res: ServerResponse,
   parsedBody?: unknown,
 ): Promise<void> {
+  applyMcpCorsHeaders(res);
   const sessionId = (req.headers["mcp-session-id"] as string | undefined) ?? undefined;
 
   try {
@@ -244,7 +247,7 @@ export async function handleMcpHttp(
 
     const created = createServer();
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
+      ...mcpStreamableHttpTransportOptions(paths),
       onsessioninitialized: (sid) => {
         sessions.set(sid, {
           transport,

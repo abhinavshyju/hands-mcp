@@ -16,6 +16,7 @@ import { registerProtectedResourceMetadata } from "./oauth/prm.js";
 import { createEmbeddedOAuthProvider } from "./oauth/provider.js";
 import { registerControl } from "./control.js";
 import { createMcpServer, handleMcpHttp, type McpHttpSession } from "./mcp.js";
+import { MCP_CORS_HEADERS } from "./mcpHttpConfig.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -76,12 +77,16 @@ export async function startServer(runtime: HandsRuntime): Promise<StartedServer>
   const sessions = new Map<string, McpHttpSession>();
 
   app.all("/mcp", async (req, reply) => {
+    if (req.method === "OPTIONS") {
+      return reply.code(204).headers(MCP_CORS_HEADERS).send();
+    }
     const ctx = req.handsAuth ?? defaultAuthContext("none", "mcp");
     reply.hijack();
     await runWithAuthContextAsync(ctx, async () =>
       handleMcpHttp(
         () => createMcpServer(runtime, registry),
         sessions,
+        runtime.paths,
         req.raw,
         reply.raw,
         req.body,
@@ -117,6 +122,7 @@ export async function startServer(runtime: HandsRuntime): Promise<StartedServer>
   const addr = app.server.address();
   const actualPort = typeof addr === "object" && addr ? addr.port : port;
   runtime.port = actualPort;
+  runtime.tunnel.setLocalPort(actualPort);
 
   const close = async () => {
     plugins.close();

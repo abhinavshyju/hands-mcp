@@ -1,7 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
-import { DaemonClient, loadGlobalConfig, ensureDir } from "@hands/core";
+import {
+  DaemonClient,
+  ensureDir,
+  loadGlobalConfig,
+  normalizeTunnelConfigForSession,
+  type HandsPaths,
+  tunnelWanted,
+} from "@hands/core";
 import { startServer } from "@hands/server";
 import { APP_NAME, APP_VERSION } from "@hands/shared";
 import { runtimeFromOpts } from "../runtime-opts.js";
@@ -12,6 +19,63 @@ import { styles } from "../ui/theme.js";
 import { ensureGlobalHome, ensureProjectDir, registerProjectWorkspace } from "../project-setup.js";
 import { stopHandsDaemon } from "../shutdown.js";
 import type { StartedServer } from "@hands/server";
+
+interface TunnelBannerState {
+  enabled: boolean;
+  mode?: string;
+  hostname?: string;
+  quickUrl?: string;
+  healthy: boolean;
+  status: string;
+  lastError?: string;
+}
+
+function tunnelBannerLine(tunnel: TunnelBannerState): { key: string; value: string } | undefined {
+  if (!tunnel.enabled && (tunnel.mode === "off" || !tunnel.mode)) return undefined;
+  const publicBase =
+    tunnel.quickUrl ??
+    (tunnel.hostname ? `https://${tunnel.hostname.replace(/^https?:\/\//, "")}` : undefined);
+  if (tunnel.healthy && publicBase) {
+    return { key: "Tunnel", value: `${publicBase.replace(/\/$/, "")}/mcp` };
+  }
+  if (tunnel.status === "starting") {
+    return { key: "Tunnel", value: "starting…" };
+  }
+  if (tunnel.lastError) {
+    return { key: "Tunnel", value: `unavailable (${tunnel.lastError.slice(0, 100)})` };
+  }
+  if (publicBase) {
+    return { key: "Tunnel", value: `${publicBase.replace(/\/$/, "")}/mcp (not reachable)` };
+  }
+  return undefined;
+}
+
+async function ensureDaemonTunnel(
+  client: DaemonClient,
+  paths: HandsPaths,
+  noTunnel: boolean,
+): Promise<void> {
+  if (noTunnel) return;
+  normalizeTunnelConfigForSession(paths);
+  const cfg = loadGlobalConfig(paths);
+  if (!tunnelWanted(cfg.tunnel, noTunnel)) return;
+
+  const st = await client.state();
+  if (st.tunnel.healthy) return;
+
+  if (st.tunnel.status === "stopped" || st.tunnel.status === "disabled") {
+    await client.tunnelStart();
+  } else {
+    await client.tunnelRestart();
+  }
+
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    const health = await client.tunnelHealth();
+    if (health.ok) return;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+}
 
 export interface StartOpts {
   home?: string;
@@ -42,6 +106,15 @@ async function attachToRunningDaemon(
     return false;
   }
 
+  if (!opts.noTunnel) {
+    await ensureDaemonTunnel(client, rt.paths, false);
+    try {
+      st = await client.state();
+    } catch {
+      // keep prior state for banner
+    }
+  }
+
   const url = `http://${st.host}:${st.port}`;
   if (workspaceRoot) {
     try {
@@ -60,6 +133,7 @@ async function attachToRunningDaemon(
     }
   }
 
+  const attachTunnel = tunnelBannerLine(st.tunnel);
   printBanner({
     name: APP_NAME,
     version: APP_VERSION,
@@ -67,6 +141,7 @@ async function attachToRunningDaemon(
     lines: [
       { key: "Local", value: url },
       { key: "MCP", value: `${url}/mcp` },
+      ...(attachTunnel ? [attachTunnel] : []),
       {
         key: "Mode",
         value: st.mode,
@@ -136,13 +211,12 @@ export async function runStart(opts: StartOpts): Promise<void> {
     throw err;
   }
   fs.writeFileSync(rt.paths.pidFile, String(process.pid), "utf8");
-  const cfg = loadGlobalConfig(rt.paths);
+  const cfgAfterStart = loadGlobalConfig(rt.paths);
+  if (tunnelWanted(cfgAfterStart.tunnel, rt.noTunnel) && !rt.tunnel.getState().healthy) {
+    await rt.tunnel.refreshHealth();
+  }
   const tunnel = rt.tunnel.getState();
-  const tunnelLine = tunnel.quickUrl
-    ? `${tunnel.quickUrl}/mcp`
-    : cfg.tunnel.hostname
-      ? `https://${cfg.tunnel.hostname}/mcp`
-      : undefined;
+  const tunnelLine = tunnelBannerLine(tunnel);
   const mode = rt.merged().mode;
   printBanner({
     name: APP_NAME,
@@ -150,7 +224,7 @@ export async function runStart(opts: StartOpts): Promise<void> {
     lines: [
       { key: "Local", value: started.url },
       { key: "MCP", value: `${started.url}/mcp` },
-      ...(tunnelLine ? [{ key: "Tunnel", value: tunnelLine }] : []),
+      ...(tunnelLine ? [tunnelLine] : []),
       { key: "Tools", value: String(started.registry.list().length) },
       {
         key: "Mode",

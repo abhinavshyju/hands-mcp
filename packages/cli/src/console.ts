@@ -6,9 +6,11 @@ import {
   applyGlobalConfigKey,
   authStartupWarnings,
   buildOAuthDiscoveryUrls,
+  effectiveTunnelMode,
   ensureDaemon,
   formatOAuthDiscoveryLines,
   loadGlobalConfig,
+  normalizeTunnelConfigForSession,
   saveGlobalConfig,
   setModeScoped,
   type HandsRuntime,
@@ -511,6 +513,16 @@ async function handleSlash(
       printJson(out);
       return true;
     }
+    if (sub === "start") {
+      const out = await client.tunnelStart();
+      printJson(out);
+      return true;
+    }
+    if (sub === "stop") {
+      const out = await client.tunnelStop();
+      printJson(out);
+      return true;
+    }
     if (sub === "set") {
       const modeArg = parts[2]?.toLowerCase();
       const modes = new Set(["off", "quick", "token", "named", "ngrok"]);
@@ -617,6 +629,7 @@ export function applySessionTunnelFlags(
   tunnelQuick?: boolean,
   tunnel?: boolean,
 ): void {
+  normalizeTunnelConfigForSession(rt.paths);
   const cfg = loadGlobalConfig(rt.paths);
   if (tunnelQuick) {
     cfg.tunnel = { ...cfg.tunnel, mode: "quick", enabled: true };
@@ -630,5 +643,9 @@ export function applySessionTunnelFlags(
       cfg.tunnel.mode = "named";
       saveGlobalConfig(rt.paths, cfg);
     }
+    return;
+  }
+  if (!rt.noTunnel && effectiveTunnelMode(cfg.tunnel) !== "off") {
+    rt.noTunnel = false;
   }
 }

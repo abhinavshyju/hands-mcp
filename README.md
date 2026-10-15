@@ -8,6 +8,12 @@
 
 The chat app is the brain. **Hands** is the hands. There is no LLM inside the daemon—it exposes [Model Context Protocol](https://modelcontextprotocol.io/) over HTTP at `/mcp`.
 
+## Demo
+
+<video src="docs/assets/demo.mp4" controls width="100%">
+  <a href="docs/assets/demo.mp4">Download demo video</a>
+</video>
+
 ## Works with
 
 - **ChatGPT** — remote MCP / connector settings (URL + bearer token)

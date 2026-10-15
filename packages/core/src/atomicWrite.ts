@@ -1,8 +1,39 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { DEFAULT_FILE_SIZE_LIMIT, EditError } from "@hands/shared";
 import { applyLineInfo, detectLineInfo } from "./lineEnding.js";
+
+function tempWritePath(dest: string): string {
+  const dir = path.dirname(dest);
+  return path.join(
+    dir,
+    `.hands-write-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  );
+}
+
+function replaceDestFromTemp(dest: string, tmp: string): void {
+  try {
+    fs.renameSync(tmp, dest);
+  } catch (err) {
+    const code =
+      err instanceof Error && "code" in err ? (err as NodeJS.ErrnoException).code : undefined;
+    if (code !== "EXDEV") throw err;
+    fs.copyFileSync(tmp, dest);
+    fs.unlinkSync(tmp);
+  }
+}
+
+function commitAtomicReplace(dest: string, writePayload: (tmpPath: string) => void): void {
+  const dir = path.dirname(dest);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = tempWritePath(dest);
+  try {
+    writePayload(tmp);
+    replaceDestFromTemp(dest, tmp);
+  } finally {
+    if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+  }
+}
 
 export function atomicWriteFile(
   dest: string,
@@ -19,14 +50,9 @@ export function atomicWriteFile(
     const existing = fs.readFileSync(dest, "utf8");
     payload = applyLineInfo(contents, detectLineInfo(existing));
   }
-  const dir = path.dirname(dest);
-  fs.mkdirSync(dir, { recursive: true });
-  const tmp = path.join(
-    os.tmpdir(),
-    `.hands-write-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-  );
-  fs.writeFileSync(tmp, payload, "utf8");
-  fs.renameSync(tmp, dest);
+  commitAtomicReplace(dest, (tmp) => {
+    fs.writeFileSync(tmp, payload, "utf8");
+  });
 }
 
 export function atomicWriteBuffer(
@@ -38,12 +64,7 @@ export function atomicWriteBuffer(
   if (contents.byteLength > max) {
     throw new EditError(`File exceeds size limit (${max} bytes)`);
   }
-  const dir = path.dirname(dest);
-  fs.mkdirSync(dir, { recursive: true });
-  const tmp = path.join(
-    os.tmpdir(),
-    `.hands-write-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-  );
-  fs.writeFileSync(tmp, contents);
-  fs.renameSync(tmp, dest);
+  commitAtomicReplace(dest, (tmp) => {
+    fs.writeFileSync(tmp, contents);
+  });
 }
