@@ -1,21 +1,25 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import readline from "node:readline/promises";
-import { spawnSync } from "node:child_process";
 import type { Command } from "commander";
-import {
-  ensureDir,
-  loadGlobalConfig,
-  saveGlobalConfig,
-  writeTunnelConfig,
-} from "@editer/core";
-import type { TunnelMode } from "@editer/shared";
+import { loadGlobalConfig } from "@hands/core";
+import type { TunnelMode } from "@hands/shared";
 import { runtimeFromOpts } from "../runtime-opts.js";
 import { withDaemon } from "./config.js";
+import {
+  cloudflaredBin,
+  runTunnelCreate,
+  runTunnelList,
+  runTunnelLogin,
+  runTunnelRouteDns,
+  setupNamedTunnel,
+} from "../tunnel-cloudflared.js";
+import { hint, info, printJson, success, writeln } from "../ui/render.js";
+import { styles } from "../ui/theme.js";
+
+type HomeOpts = { home?: string };
 
 export function registerTunnel(program: Command): void {
-  const tunnel = program.command("tunnel").description("Cloudflare tunnel configuration");
+  const tunnel = program
+    .command("tunnel")
+    .description("Public URL tunnels (Cloudflare quick/token/named, or ngrok)");
 
   tunnel
     .command("status")
@@ -23,32 +27,52 @@ export function registerTunnel(program: Command): void {
     .option("--home <dir>")
     .action(async (opts: { check?: boolean; home?: string }) => {
       const rt = runtimeFromOpts(opts);
-      const { DaemonClient } = await import("@editer/core");
+      const { DaemonClient } = await import("@hands/core");
       const client = DaemonClient.fromPaths(rt.paths);
       if (await client.isRunning()) {
         const st = await client.state();
-        console.log(JSON.stringify(st.tunnel, null, 2));
+        printJson(st.tunnel);
         if (opts.check && st.tunnel.hostname) {
           const health = await client.tunnelHealth();
-          console.log(`Public health: ${health.ok ? "ok" : "failed"}`);
+          info(`Public health: ${health.ok ? styles.ok("ok") : styles.err("failed")}`);
         }
         return;
       }
       const cfg = loadGlobalConfig(rt.paths);
-      console.log(JSON.stringify(cfg.tunnel, null, 2));
+      printJson(cfg.tunnel);
+    });
+
+  tunnel
+    .command("ngrok")
+    .description("Expose MCP via ngrok (requires ngrok on PATH or ~/.hands/bin/ngrok)")
+    .option("--authtoken <t>", "ngrok authtoken (or set NGROK_AUTHTOKEN)")
+    .option("--home <dir>")
+    .action(async (opts: { authtoken?: string; home?: string }) => {
+      const rt = runtimeFromOpts(opts);
+      const ws = rt.workspaces.requireActive();
+      await withDaemon(rt, ws.root, async (c) => {
+        await c.setTunnel({
+          mode: "ngrok",
+          enabled: true,
+          ...(opts.authtoken ? { ngrokAuthtoken: opts.authtoken } : {}),
+        });
+        const out = await c.tunnelRestart();
+        printJson(out);
+      });
+      hint("Tunnel mode: ngrok (check logs/UI for public URL)");
     });
 
   tunnel
     .command("quick")
     .description("Enable ephemeral trycloudflare tunnel")
     .option("--home <dir>")
-    .action(async (opts: { home?: string }) => {
+    .action(async (opts: HomeOpts) => {
       const rt = runtimeFromOpts(opts);
       const ws = rt.workspaces.getActive();
       const root = ws?.root ?? process.cwd();
       await withDaemon(rt, root, async (c) => {
         const out = await c.tunnelQuick();
-        console.log(JSON.stringify(out, null, 2));
+        printJson(out);
       });
     });
 
@@ -63,114 +87,169 @@ export function registerTunnel(program: Command): void {
       await withDaemon(rt, ws.root, (c) =>
         c.setTunnel({ mode: "token", token, hostname: opts.hostname, enabled: true }),
       );
-      console.log("Tunnel mode: token");
+      success("Tunnel mode: token");
     });
 
   tunnel
     .command("set")
     .option("--hostname <h>")
-    .option("--mode <m>", "off|quick|token|named")
+    .option("--mode <m>", "off|quick|token|named|ngrok")
     .option("--expose-ui", "Expose web UI over tunnel")
     .option("--no-expose-ui", "Do not expose web UI over tunnel")
     .option("--home <dir>")
-    .action(async (opts: { hostname?: string; mode?: string; exposeUi?: boolean; noExposeUi?: boolean; home?: string }) => {
-      const rt = runtimeFromOpts(opts);
-      const ws = rt.workspaces.requireActive();
-      const patch: { hostname?: string; mode?: TunnelMode; exposeUiOverTunnel?: boolean; enabled?: boolean } = {};
-      if (opts.hostname) patch.hostname = opts.hostname;
-      if (opts.mode) {
-        patch.mode = opts.mode as TunnelMode;
-        patch.enabled = opts.mode !== "off";
-      }
-      if (opts.exposeUi) patch.exposeUiOverTunnel = true;
-      if (opts.noExposeUi) patch.exposeUiOverTunnel = false;
-      await withDaemon(rt, ws.root, (c) => c.setTunnel(patch));
-      console.log("Tunnel config updated.");
-    });
+    .action(
+      async (opts: {
+        hostname?: string;
+        mode?: string;
+        exposeUi?: boolean;
+        noExposeUi?: boolean;
+        home?: string;
+      }) => {
+        const rt = runtimeFromOpts(opts);
+        const ws = rt.workspaces.requireActive();
+        const patch: {
+          hostname?: string;
+          mode?: TunnelMode;
+          exposeUiOverTunnel?: boolean;
+          enabled?: boolean;
+        } = {};
+        if (opts.hostname) patch.hostname = opts.hostname;
+        if (opts.mode) {
+          patch.mode = opts.mode as TunnelMode;
+          patch.enabled = opts.mode !== "off";
+        }
+        if (opts.exposeUi) patch.exposeUiOverTunnel = true;
+        if (opts.noExposeUi) patch.exposeUiOverTunnel = false;
+        await withDaemon(rt, ws.root, (c) => c.setTunnel(patch));
+        success("Tunnel config updated.");
+      },
+    );
 
   tunnel
     .command("enable")
     .option("--home <dir>")
-    .action(async (opts: { home?: string }) => {
+    .action(async (opts: HomeOpts) => {
       const rt = runtimeFromOpts(opts);
       const ws = rt.workspaces.requireActive();
       const cfg = loadGlobalConfig(rt.paths);
       const mode = cfg.tunnel.mode && cfg.tunnel.mode !== "off" ? cfg.tunnel.mode : "named";
       await withDaemon(rt, ws.root, (c) => c.setTunnel({ enabled: true, mode }));
-      console.log(`Tunnel enabled (${mode})`);
+      success(`Tunnel enabled (${mode})`);
     });
 
   tunnel
     .command("disable")
     .option("--home <dir>")
-    .action(async (opts: { home?: string }) => {
+    .action(async (opts: HomeOpts) => {
       const rt = runtimeFromOpts(opts);
       const ws = rt.workspaces.requireActive();
       await withDaemon(rt, ws.root, (c) => c.setTunnel({ mode: "off", enabled: false }));
-      console.log("Tunnel disabled");
+      success("Tunnel disabled");
     });
 
   tunnel
     .command("restart")
     .option("--home <dir>")
-    .action(async (opts: { home?: string }) => {
+    .action(async (opts: HomeOpts) => {
       const rt = runtimeFromOpts(opts);
       const ws = rt.workspaces.requireActive();
       await withDaemon(rt, ws.root, (c) => c.tunnelRestart());
-      console.log("Tunnel restarted");
+      success("Tunnel restarted");
+    });
+
+  tunnel
+    .command("start")
+    .description("Start cloudflared via the running daemon")
+    .option("--home <dir>")
+    .action(async (opts: HomeOpts) => {
+      const rt = runtimeFromOpts(opts);
+      const ws = rt.workspaces.requireActive();
+      await withDaemon(rt, ws.root, async (c) => {
+        const out = await c.tunnelStart();
+        printJson(out);
+      });
+    });
+
+  tunnel
+    .command("stop")
+    .description("Stop cloudflared via the running daemon")
+    .option("--home <dir>")
+    .action(async (opts: HomeOpts) => {
+      const rt = runtimeFromOpts(opts);
+      const ws = rt.workspaces.requireActive();
+      await withDaemon(rt, ws.root, async (c) => {
+        const out = await c.tunnelStop();
+        printJson(out);
+      });
     });
 
   tunnel
     .command("install")
-    .description("Download cloudflared to ~/.editer/bin")
+    .description("Download cloudflared to ~/.hands/bin")
     .option("--home <dir>")
-    .action(async (opts: { home?: string }) => {
+    .action(async (opts: HomeOpts) => {
       const rt = runtimeFromOpts(opts);
-      const bin = await rt.tunnel.ensureBinary();
-      console.log(bin);
+      const bin = await cloudflaredBin(rt);
+      writeln(bin);
+    });
+
+  tunnel
+    .command("login")
+    .description("Authenticate cloudflared with Cloudflare")
+    .option("--home <dir>")
+    .action(async (opts: HomeOpts) => {
+      const rt = runtimeFromOpts(opts);
+      await runTunnelLogin(rt);
+    });
+
+  tunnel
+    .command("create")
+    .description("Create a named Cloudflare tunnel")
+    .option("--name <n>", "Tunnel name")
+    .option("--home <dir>")
+    .action(async (opts: { name?: string; home?: string }) => {
+      const rt = runtimeFromOpts(opts);
+      const created = await runTunnelCreate(rt, opts.name);
+      printJson(created);
+    });
+
+  const route = tunnel.command("route").description("Configure tunnel routing");
+
+  route
+    .command("dns")
+    .description("Create a DNS CNAME for a tunnel hostname")
+    .argument("<hostname>", "Public hostname (e.g. hands.example.com)")
+    .option("--name <n>", "Tunnel name")
+    .option("--home <dir>")
+    .action(async (hostname: string, opts: { name?: string; home?: string }) => {
+      const rt = runtimeFromOpts(opts);
+      await runTunnelRouteDns(rt, hostname, opts.name);
+    });
+
+  tunnel
+    .command("list")
+    .description("List Cloudflare tunnels")
+    .option("--home <dir>")
+    .action(async (opts: HomeOpts) => {
+      const rt = runtimeFromOpts(opts);
+      await runTunnelList(rt);
     });
 
   tunnel
     .command("setup")
-    .description("Create a Cloudflare named tunnel (requires cloudflared login)")
+    .description("Create a Cloudflare named tunnel (login, create, DNS, config)")
     .option("--home <dir>")
-    .action(async (opts: { home?: string }) => {
-      const rt = runtimeFromOpts(opts);
-      const bin = await rt.tunnel.ensureBinary();
-      console.log(`Using ${bin}`);
-      spawnSync(bin, ["tunnel", "login"], { stdio: "inherit" });
-      const name = `editer-${os.hostname().replace(/[^a-zA-Z0-9-]/g, "").slice(0, 20) || "local"}`;
-      spawnSync(bin, ["tunnel", "create", name], { stdio: "inherit" });
-      const credDir = path.join(os.homedir(), ".cloudflared");
-      const cred = fs.existsSync(credDir)
-        ? fs.readdirSync(credDir).find((f) => f.endsWith(".json"))
-        : undefined;
-      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      const hostname = await rl.question("Public hostname (e.g. editer.example.com): ");
-      rl.close();
-      const credentialsFile = cred ? path.join(credDir, cred) : path.join(rt.paths.tunnel, "credentials.json");
-      ensureDir(rt.paths.tunnel);
-      if (cred) fs.copyFileSync(path.join(credDir, cred), path.join(rt.paths.tunnel, "credentials.json"));
-      const cfg = loadGlobalConfig(rt.paths);
-      const configFile = writeTunnelConfig(rt.paths, {
-        tunnelId: name,
-        credentialsFile: fs.existsSync(path.join(rt.paths.tunnel, "credentials.json"))
-          ? path.join(rt.paths.tunnel, "credentials.json")
-          : credentialsFile,
-        hostname: hostname.trim(),
-        port: cfg.port,
-      });
-      spawnSync(bin, ["tunnel", "route", "dns", name, hostname.trim()], { stdio: "inherit" });
-      cfg.tunnel = {
-        ...cfg.tunnel,
-        enabled: true,
-        mode: "named",
-        hostname: hostname.trim(),
-        tunnelName: name,
-        credentialsFile: path.join(rt.paths.tunnel, "credentials.json"),
-        configFile,
-      };
-      saveGlobalConfig(rt.paths, cfg);
-      console.log(`Tunnel configured. MCP URL: https://${hostname.trim()}/mcp`);
-    });
+    .option("--skip-login", "Skip cloudflared tunnel login")
+    .option("--name <n>", "Tunnel name")
+    .option("--hostname <h>", "Public hostname (non-interactive)")
+    .action(
+      async (opts: { home?: string; skipLogin?: boolean; name?: string; hostname?: string }) => {
+        const rt = runtimeFromOpts(opts);
+        await setupNamedTunnel(rt, {
+          skipLogin: opts.skipLogin,
+          name: opts.name,
+          hostname: opts.hostname,
+        });
+      },
+    );
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@editer/tools",
+  "name": "@hands/tools",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -10,14 +10,16 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@editer/core": "workspace:*",
-    "@editer/shared": "workspace:*",
+    "@hands/core": "workspace:*",
+    "@hands/shared": "workspace:*",
     "fast-glob": "^3.3.3",
     "zod": "^3.24.2"
   }

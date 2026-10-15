@@ -2,8 +2,10 @@ import path from "node:path";
 import type { Command } from "commander";
 import { runtimeFromOpts } from "../runtime-opts.js";
 import { ensureGlobalHome, ensureProjectDir, registerProjectWorkspace } from "../project-setup.js";
-import type { WorkspaceMode } from "@editer/shared";
+import type { WorkspaceMode } from "@hands/shared";
 import { withDaemon } from "./config.js";
+import { modeBadge, success, writeln } from "../ui/render.js";
+import { styles } from "../ui/theme.js";
 
 export function registerWorkspace(program: Command): void {
   const ws = program.command("workspace");
@@ -19,10 +21,10 @@ export function registerWorkspace(program: Command): void {
         await withDaemon(rt, resolved, (c) => c.addWorkspace(resolved, opts.name));
       } catch {
         const rec = rt.workspaces.add(resolved, opts.name);
-        console.log(`Active workspace: ${rec.name} (${rec.root})`);
+        success(`Active workspace: ${rec.name} (${rec.root})`);
         return;
       }
-      console.log(`Active workspace: ${opts.name ?? path.basename(resolved)} (${resolved})`);
+      success(`Active workspace: ${opts.name ?? path.basename(resolved)} (${resolved})`);
     });
 
   ws.command("list")
@@ -31,7 +33,10 @@ export function registerWorkspace(program: Command): void {
       const rt = runtimeFromOpts(opts);
       for (const w of rt.workspaces.list()) {
         const mark = rt.workspaces.getActive()?.id === w.id ? "*" : " ";
-        console.log(`${mark} ${w.id}  ${w.mode}  ${w.name}  ${w.root}`);
+        const active = mark === "*" ? styles.accent("*") : " ";
+        writeln(
+          `${active} ${styles.dim(w.id)}  ${modeBadge(w.mode)}  ${w.name}  ${styles.muted(w.root)}`,
+        );
       }
     });
 
@@ -41,7 +46,7 @@ export function registerWorkspace(program: Command): void {
     .action(async (id: string, opts: { home?: string }) => {
       const rt = runtimeFromOpts(opts);
       try {
-        const client = (await import("@editer/core")).DaemonClient.fromPaths(rt.paths);
+        const client = (await import("@hands/core")).DaemonClient.fromPaths(rt.paths);
         if (await client.isRunning()) {
           await client.removeWorkspace(id);
           return;
@@ -65,7 +70,7 @@ export function registerWorkspace(program: Command): void {
       } catch {
         rt.workspaces.setActive(id);
       }
-      console.log(`Active: ${w.name}`);
+      success(`Active: ${w.name}`);
     });
 
   ws.command("mode")
@@ -81,7 +86,7 @@ export function registerWorkspace(program: Command): void {
       } catch {
         rt.workspaces.setMode(id, mode as WorkspaceMode);
       }
-      console.log(`Mode for ${w.name}: ${mode}`);
+      success(`Mode for ${w.name}: ${modeBadge(mode)}`);
     });
 
   ws.command("init")
@@ -96,7 +101,12 @@ export function registerWorkspace(program: Command): void {
         mode: opts.mode as WorkspaceMode | undefined,
         template: opts.template,
       });
-      const rec = registerProjectWorkspace(rt, root, undefined, opts.mode as WorkspaceMode | undefined);
-      console.log(`Workspace: ${rec.name} (${rec.root})`);
+      const rec = registerProjectWorkspace(
+        rt,
+        root,
+        undefined,
+        opts.mode as WorkspaceMode | undefined,
+      );
+      success(`Workspace: ${rec.name} (${rec.root})`);
     });
 }

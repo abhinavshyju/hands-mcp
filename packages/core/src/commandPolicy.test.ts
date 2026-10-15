@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PolicyDeniedError } from "@editer/shared";
+import { PolicyDeniedError } from "@hands/shared";
 import { assertCommandAllowed } from "./commandPolicy.js";
 
 describe("command policy", () => {

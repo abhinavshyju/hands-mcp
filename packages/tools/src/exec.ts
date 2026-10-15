@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { assertCommandAllowed, runCommand } from "@editer/core";
+import { assertCommandAllowed, runCommand } from "@hands/core";
 import { defineTool } from "./types.js";
 
 export const execTools = [
   defineTool({
     name: "run_command",
-    description: "Run a shell command in the workspace with timeout, output caps, and a scrubbed environment.",
+    description:
+      "Run a shell command in the workspace with timeout, output caps, and a scrubbed environment.",
     group: "exec",
     mutating: true,
     schema: z.object({
@@ -30,7 +31,8 @@ export const execTools = [
   }),
   defineTool({
     name: "start_process",
-    description: "Start a long-running process (dev server, watcher). Returns a handle immediately.",
+    description:
+      "Start a long-running process (dev server, watcher). Returns a handle immediately.",
     group: "exec",
     mutating: true,
     schema: z.object({ command: z.string() }),

@@ -1,15 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { type AuditEvent, auditEventSchema } from "@editer/shared";
-import type { EditerPaths } from "./paths.js";
+import { type AuditEvent, auditEventSchema } from "@hands/shared";
+import type { HandsPaths } from "./paths.js";
 import { ensureDir } from "./paths.js";
 import { redactValue } from "./redact.js";
 import type { EventBus } from "./events.js";
 
 export class AuditLog {
   constructor(
-    private readonly paths: EditerPaths,
+    private readonly paths: HandsPaths,
     private readonly events: EventBus,
   ) {}
 
@@ -32,9 +32,9 @@ export class AuditLog {
     return event;
   }
 
-  query(opts: { limit?: number; tool?: string } = {}): AuditEvent[] {
+  query(opts: { limit?: number; tool?: string; workspaceId?: string } = {}): AuditEvent[] {
     const limit = opts.limit ?? 200;
-    ensureDir(this.paths.logs);
+    if (!fs.existsSync(this.paths.logs)) return [];
     const files = fs
       .readdirSync(this.paths.logs)
       .filter((f) => f.endsWith(".jsonl"))
@@ -48,6 +48,7 @@ export class AuditLog {
         try {
           const parsed = auditEventSchema.parse(JSON.parse(line));
           if (opts.tool && parsed.tool !== opts.tool) continue;
+          if (opts.workspaceId && parsed.workspaceId !== opts.workspaceId) continue;
           out.push(parsed);
           if (out.length >= limit) return out;
         } catch {
@@ -56,5 +57,13 @@ export class AuditLog {
       }
     }
     return out;
+  }
+
+  clear(): void {
+    if (!fs.existsSync(this.paths.logs)) return;
+    for (const file of fs.readdirSync(this.paths.logs)) {
+      if (!file.endsWith(".jsonl")) continue;
+      fs.unlinkSync(path.join(this.paths.logs, file));
+    }
   }
 }

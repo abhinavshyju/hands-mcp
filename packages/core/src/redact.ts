@@ -1,4 +1,4 @@
-import { SENSITIVE_KEY_PATTERN } from "@editer/shared";
+import { SENSITIVE_KEY_PATTERN } from "@hands/shared";
 
 const TOKENISH = /\b(?:sk-|ghp_|github_pat_|Bearer\s+)[A-Za-z0-9._\-/=+]{8,}\b/g;
 

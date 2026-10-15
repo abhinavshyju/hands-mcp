@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { PathJailError, DEFAULT_READ_DENY_GLOBS, DEFAULT_WRITE_DENY_GLOBS } from "@editer/shared";
+import { PathJailError, DEFAULT_READ_DENY_GLOBS, DEFAULT_WRITE_DENY_GLOBS } from "@hands/shared";
 
 function normalizeSeparators(p: string): string {
   return p.replaceAll("\\", "/");
@@ -63,9 +63,7 @@ export function resolvePath(opts: JailOptions): string {
   }
 
   const raw = normalizeSeparators(opts.input);
-  const joined = path.isAbsolute(raw)
-    ? path.resolve(raw)
-    : path.resolve(workspaceRoot, raw);
+  const joined = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(workspaceRoot, raw);
 
   const ancestor = existingAncestor(joined);
   const resolvedAncestor = realpathSafe(ancestor);

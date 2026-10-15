@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { diffCheckpoint, listCheckpoints, restoreCheckpoint } from "@editer/core";
+import { diffCheckpoint, listCheckpoints, restoreCheckpoint } from "@hands/core";
 import { defineTool } from "./types.js";
 
 export const checkpointTools = [
@@ -28,7 +28,6 @@ export const checkpointTools = [
       id: z.string(),
       files: z.array(z.string()).optional(),
     }),
-    handler: (ctx, args) =>
-      restoreCheckpoint(ctx.runtime.workspace().root, args.id, args.files),
+    handler: (ctx, args) => restoreCheckpoint(ctx.runtime.workspace().root, args.id, args.files),
   }),
 ];

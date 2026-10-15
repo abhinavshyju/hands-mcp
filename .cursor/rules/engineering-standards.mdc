@@ -1,0 +1,42 @@
+---
+description: Smallest correct diffs, package boundaries, and repo-native style (no generic AI patterns)
+alwaysApply: true
+---
+
+# Engineering standards (hands-mcp)
+
+## Scope
+
+- Ship the **smallest correct change** for the task. No drive-by refactors or unrelated files.
+- Before adding code, read neighbors in the same file and package. Match naming, imports, and error style.
+
+## Package boundaries
+
+| Package | Owns |
+| --- | --- |
+| `@hands/shared` | Schemas, constants, pure helpers |
+| `@hands/core` | Domain logic, config, jail/policy — no CLI or UI |
+| `@hands/tools` | MCP tool implementations |
+| `@hands/server` | HTTP, MCP, auth wiring |
+| `@hands/cli` | Thin commands: parse args → delegate to core/tools |
+| `@hands/ui` (`apps/ui`) | Workbench UI only |
+
+Put shared logic in `core` or `shared`, not duplicated across CLI commands. Keep command files thin.
+
+## Modularity heuristics
+
+Judge each change; these are smells, not hard failures.
+
+- **Speculative generality**: No extra parameters, hooks, or layers the task does not need.
+- **Middle man**: No one-line wrappers unless they hide a real boundary (policy, IO, test seam).
+- **Shotgun surgery / divergent change**: If one feature scatters across unrelated modules, consolidate or split along package lines.
+
+## Style
+
+- **Comments**: Only non-obvious invariants or security/policy rationale.
+- **Errors**: Specific, actionable messages like existing code. No blanket try/catch or vague “Something went wrong” unless the surrounding code already does that.
+- **Tests**: Add or adjust tests when behavior changes. Skip tests that only restate types or trivial getters.
+
+## Formatting
+
+Run `pnpm format` or save in the editor (Prettier). CI runs `pnpm format:check` via `pnpm check`.

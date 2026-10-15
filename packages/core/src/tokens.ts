@@ -1,10 +1,10 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { type ClientToken, AuthError } from "@editer/shared";
+import { type ClientToken, AuthError } from "@hands/shared";
 import { loadGlobalConfig, saveGlobalConfig } from "./config.js";
-import type { EditerPaths } from "./paths.js";
+import type { HandsPaths } from "./paths.js";
 
 export class TokenStore {
-  constructor(private readonly paths: EditerPaths) {}
+  constructor(private readonly paths: HandsPaths) {}
 
   list(): ClientToken[] {
     return loadGlobalConfig(this.paths).tokens.filter((t) => !t.revokedAt);

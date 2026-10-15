@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { type ProcessRecord } from "@editer/shared";
+import { type ProcessRecord } from "@hands/shared";
 import type { EventBus } from "./events.js";
 import { scrubEnv } from "./exec.js";
 import { redactText } from "./redact.js";
@@ -87,10 +87,6 @@ export class ProcessManager {
   }
 
   async stopAll(): Promise<void> {
-    await Promise.all(
-      [...this.procs.keys()].map((id) =>
-        this.stop(id).catch(() => undefined),
-      ),
-    );
+    await Promise.all([...this.procs.keys()].map((id) => this.stop(id).catch(() => undefined)));
   }
 }

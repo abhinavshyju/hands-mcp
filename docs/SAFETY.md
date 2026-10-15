@@ -4,18 +4,18 @@ Every mutating tool call follows: jail path → resolve mode → approve if requ
 
 ## Modes
 
-| Mode | Edits | Shell / quality |
-| --- | --- | --- |
-| `readonly` | deny | deny |
-| `review` | allow | approve |
-| `auto` | allow | allow |
+| Mode       | Edits | Shell / quality |
+| ---------- | ----- | --------------- |
+| `readonly` | deny  | deny            |
+| `review`   | allow | approve         |
+| `auto`     | allow | allow           |
 
 `auto` does not prompt for approvals. Destructive denylisted commands and the path jail still apply in every mode. Use `toolGroupOverrides` to put a group back on the approval path.
 
 Set mode:
 
 ```
-editer mode set review
+hands mode set review
 ```
 
 ## Path jail
@@ -24,7 +24,7 @@ Inputs are resolved with `realpath`. Symlinks that leave the workspace are rejec
 
 ## Checkpoints
 
-Before a mutating file tool, touched files are snapshotted into `.editer/shadow.git` using a private `GIT_DIR`. Restore from the UI or `restore_checkpoint`. The user's `HEAD` and index are not used.
+Before a mutating file tool, touched files are snapshotted into `.hands/shadow.git` using a private `GIT_DIR`. Restore from the UI or `restore_checkpoint`. The user's `HEAD` and index are not used.
 
 ## Approvals
 

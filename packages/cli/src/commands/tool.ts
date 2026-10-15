@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
-import { ensureDir } from "@editer/core";
-import { pluginScaffold } from "@editer/tools";
+import { ensureDir } from "@hands/core";
+import { pluginScaffold } from "@hands/tools";
 import { runtimeFromOpts } from "../runtime-opts.js";
+import { success } from "../ui/render.js";
 
 export function registerTool(program: Command): void {
   const tool = program.command("tool");
@@ -16,6 +17,6 @@ export function registerTool(program: Command): void {
       ensureDir(rt.paths.pluginDir);
       const file = path.join(rt.paths.pluginDir, `${name}.js`);
       fs.writeFileSync(file, pluginScaffold(name), "utf8");
-      console.log(`Wrote ${file}`);
+      success(`Wrote ${file}`);
     });
 }

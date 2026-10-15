@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EditerError } from "@editer/shared";
+import { HandsError } from "@hands/shared";
 import { samplingImageSource } from "./image.js";
 
 const PNG =
@@ -15,7 +15,7 @@ describe("samplingImageSource", () => {
       available: () => false,
       createMessage: async () => ({ content: { type: "image", data: PNG, mimeType: "image/png" } }),
     });
-    await expect(src2.generate("a cat")).rejects.toBeInstanceOf(EditerError);
+    await expect(src2.generate("a cat")).rejects.toBeInstanceOf(HandsError);
     await expect(src2.generate("a cat")).rejects.toMatchObject({ code: "SAMPLING_UNAVAILABLE" });
   });
 

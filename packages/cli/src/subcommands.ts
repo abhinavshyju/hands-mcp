@@ -1,0 +1,37 @@
+/** Top-level `hands` subcommands (excludes default session dir shortcut). */
+export const SUBCOMMANDS = new Set([
+  "init",
+  "start",
+  "stop",
+  "status",
+  "logs",
+  "config",
+  "mode",
+  "review",
+  "approvals",
+  "workspace",
+  "tunnel",
+  "connect",
+  "stdio",
+  "tool",
+  "token",
+  "auth",
+  "auto",
+  "readonly",
+  "completion",
+  "__complete",
+]);
+
+export const DEFAULT_SESSION_FLAGS = [
+  "--headless",
+  "--no-tunnel",
+  "--tunnel",
+  "--tunnel-quick",
+  "--open",
+  "--mode",
+  "--host",
+  "--port",
+  "--home",
+  "-h",
+  "--help",
+];

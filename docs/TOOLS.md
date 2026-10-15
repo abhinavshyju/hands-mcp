@@ -4,13 +4,16 @@ All tools are executed on the machine running the daemon. Paths are relative to 
 
 ## Meta
 
-| Tool | Mutating | Description |
-| --- | --- | --- |
-| `get_capabilities` | no | Version, mode, workspace, limits, groups |
-| `get_config` | no | Merged config with secrets redacted |
-| `list_workspaces` | no | Registered roots |
-| `set_active_workspace` | no | Switch by id or name (cannot add roots) |
-| `get_project_overview` | no | Languages, package manager, scripts, tree, README |
+| Tool                   | Mutating | Description                                                              |
+| ---------------------- | -------- | ------------------------------------------------------------------------ |
+| `get_capabilities`     | no       | Version, mode, workspace, limits, groups                                 |
+| `get_config`           | no       | Merged config with secrets redacted                                      |
+| `list_workspaces`      | no       | Registered roots                                                         |
+| `set_active_workspace` | no       | Switch by id or name (cannot add roots)                                  |
+| `get_project_overview` | no       | Languages, package manager, scripts, tree, README                        |
+| `get_coding_guidance`  | no       | Modular edit standards + workspace AGENTS.md / Cursor rules when present |
+
+MCP resource `hands://guidance/coding-standards` exposes the same text as `get_coding_guidance`.
 
 ## Read
 
@@ -25,6 +28,8 @@ All tools are executed on the machine running the daemon. Paths are relative to 
 `write_file`, `create_file`, `str_replace`, `multi_edit`, `apply_patch`, `delete_path`, `move_path`
 
 `str_replace` fails if the exact string is missing or not unique unless `expected_occurrences` is set.
+
+After a successful write, supported source files (`.ts`, `.tsx`, `.js`, `.json`, etc.) are **auto-formatted with Prettier** when `formatOnEdit` is `true` in `.hands/config.json` (default). Tool results may include `formatted` and `formatWarning` (when Prettier cannot parse the file, the edit is kept). Call `get_coding_guidance` before large refactors.
 
 ## Exec
 
@@ -48,4 +53,4 @@ All tools are executed on the machine running the daemon. Paths are relative to 
 
 `browser_navigate`, `browser_screenshot`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_fill`, `browser_select`, `browser_press_key`, `browser_scroll`, `browser_wait_for`, `browser_eval`, `browser_get_console`, `browser_assert`, `browser_sessions`, `browser_close`
 
-Screenshots are saved under `.editer/media/` and returned as MCP image content when under the inline size cap. Localhost (and `allowedBrowserHosts`) can be opened without extra approval; other hosts still go through the approval path in `auto`. Requires Chromium (`npx playwright install chromium`).
+Screenshots are saved under `.hands/media/` and returned as MCP image content when under the inline size cap. Localhost (and `allowedBrowserHosts`) can be opened without extra approval; other hosts still go through the approval path in `auto`. Requires Chromium (`npx playwright install chromium`).

@@ -1,15 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
-import { DaemonClient, loadGlobalConfig, ensureDir } from "@editer/core";
-import { startServer } from "@editer/server";
-import { APP_NAME, APP_VERSION } from "@editer/shared";
+import { DaemonClient, loadGlobalConfig, ensureDir } from "@hands/core";
+import { startServer } from "@hands/server";
+import { APP_NAME, APP_VERSION } from "@hands/shared";
 import { runtimeFromOpts } from "../runtime-opts.js";
 import { attachApprovalSurfaces } from "../approval-surfaces.js";
 import { applySessionTunnelFlags, openBrowser, runInteractiveConsole } from "../console.js";
+import { hint, modeBadge, printBanner, printJson, success, writeln } from "../ui/render.js";
+import { styles } from "../ui/theme.js";
 import { ensureGlobalHome, ensureProjectDir, registerProjectWorkspace } from "../project-setup.js";
-import { stopEditerDaemon } from "../shutdown.js";
-import type { StartedServer } from "@editer/server";
+import { stopHandsDaemon } from "../shutdown.js";
+import type { StartedServer } from "@hands/server";
 
 export interface StartOpts {
   home?: string;
@@ -58,11 +60,21 @@ async function attachToRunningDaemon(
     }
   }
 
-  console.log(`${APP_NAME} ${APP_VERSION}`);
-  console.log(`Attached: ${url} (daemon already listening)`);
-  console.log(`MCP:     ${url}/mcp`);
-  console.log(`Mode:    ${st.mode} (${st.modeSource})`);
-  console.log(`Tools:   ${st.toolCount}`);
+  printBanner({
+    name: APP_NAME,
+    version: APP_VERSION,
+    subtitle: "Attached to running daemon",
+    lines: [
+      { key: "Local", value: url },
+      { key: "MCP", value: `${url}/mcp` },
+      {
+        key: "Mode",
+        value: st.mode,
+        valueStyle: (m) => `${modeBadge(m)} ${styles.dim(`(${st.modeSource})`)}`,
+      },
+      { key: "Tools", value: String(st.toolCount) },
+    ],
+  });
 
   if (opts.open) openBrowser(url);
 
@@ -73,11 +85,11 @@ async function attachToRunningDaemon(
       daemonClient: client,
       daemonUp: true,
       onExit: async () => {
-        await stopEditerDaemon(rt.paths);
+        await stopHandsDaemon(rt.paths);
       },
     });
   } else if (opts.interactive) {
-    console.log("No TTY — use `editer review` in a terminal for the interactive console.");
+    hint("No TTY — use `hands review` in a terminal for the interactive console.");
   }
 
   return true;
@@ -106,28 +118,48 @@ export async function runStart(opts: StartOpts): Promise<void> {
   try {
     started = await startServer(rt);
   } catch (err) {
-    const code = err && typeof err === "object" && "code" in err ? String((err as NodeJS.ErrnoException).code) : "";
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? String((err as NodeJS.ErrnoException).code)
+        : "";
     if (code === "EADDRINUSE") {
-      if (await attachToRunningDaemon(rt, opts, ensurePath ? path.resolve(ensurePath) : undefined)) {
+      if (
+        await attachToRunningDaemon(rt, opts, ensurePath ? path.resolve(ensurePath) : undefined)
+      ) {
         return;
       }
       const cfg = loadGlobalConfig(rt.paths);
       throw new Error(
-        `Port ${rt.port ?? cfg.port} is already in use. Run \`editer stop\`, change port with \`editer config set port 4878\`, or use \`editer review\` if editer is already running.`,
+        `Port ${rt.port ?? cfg.port} is already in use. Run \`hands stop\`, change port with \`hands config set port 4878\`, or use \`hands review\` if Hands is already running.`,
       );
     }
     throw err;
   }
   fs.writeFileSync(rt.paths.pidFile, String(process.pid), "utf8");
   const cfg = loadGlobalConfig(rt.paths);
-  console.log(`${APP_NAME} ${APP_VERSION}`);
-  console.log(`Local:   ${started.url}`);
-  console.log(`MCP:     ${started.url}/mcp`);
   const tunnel = rt.tunnel.getState();
-  if (tunnel.quickUrl) console.log(`Tunnel:  ${tunnel.quickUrl}/mcp`);
-  else if (cfg.tunnel.hostname) console.log(`Tunnel:  https://${cfg.tunnel.hostname}/mcp`);
-  console.log(`Tools:   ${started.registry.list().length}`);
-  console.log(`Mode:    ${rt.merged().mode} (${rt.merged().modeSource})${rt.headless ? " (headless)" : ""}`);
+  const tunnelLine = tunnel.quickUrl
+    ? `${tunnel.quickUrl}/mcp`
+    : cfg.tunnel.hostname
+      ? `https://${cfg.tunnel.hostname}/mcp`
+      : undefined;
+  const mode = rt.merged().mode;
+  printBanner({
+    name: APP_NAME,
+    version: APP_VERSION,
+    lines: [
+      { key: "Local", value: started.url },
+      { key: "MCP", value: `${started.url}/mcp` },
+      ...(tunnelLine ? [{ key: "Tunnel", value: tunnelLine }] : []),
+      { key: "Tools", value: String(started.registry.list().length) },
+      {
+        key: "Mode",
+        value: mode,
+        valueStyle: (m) =>
+          `${modeBadge(m)} ${styles.dim(`(${rt.merged().modeSource})${rt.headless ? " (headless)" : ""}`)}`,
+      },
+    ],
+  });
 
   if (opts.open) openBrowser(started.url);
 
@@ -153,7 +185,7 @@ export async function runStart(opts: StartOpts): Promise<void> {
 export function registerDaemon(program: Command): void {
   program
     .command("start")
-    .description("Start the editer daemon (non-interactive)")
+    .description("Start the Hands daemon (non-interactive)")
     .option("--headless")
     .option("--no-tunnel")
     .option("--tunnel", "Enable configured tunnel mode")
@@ -170,12 +202,12 @@ export function registerDaemon(program: Command): void {
 
   program
     .command("stop")
-    .description("Stop a daemon started with `editer start`")
+    .description("Stop a daemon started with `hands start`")
     .option("--home <dir>")
     .action(async (opts: { home?: string }) => {
       const rt = runtimeFromOpts(opts);
-      const stopped = await stopEditerDaemon(rt.paths);
-      console.log(stopped ? "editer stopped." : "No running editer daemon found.");
+      const stopped = await stopHandsDaemon(rt.paths);
+      success(stopped ? "Hands stopped." : "No running Hands daemon found.");
     });
 
   program
@@ -186,7 +218,7 @@ export function registerDaemon(program: Command): void {
       const cfg = loadGlobalConfig(rt.paths);
       const running = fs.existsSync(rt.paths.pidFile);
       const merged = rt.merged();
-      const { DaemonClient } = await import("@editer/core");
+      const { DaemonClient } = await import("@hands/core");
       const client = DaemonClient.fromPaths(rt.paths);
       let daemonReachable = false;
       let pendingApprovals = 0;
@@ -199,22 +231,16 @@ export function registerDaemon(program: Command): void {
           // ignore
         }
       }
-      console.log(
-        JSON.stringify(
-          {
-            running,
-            daemonReachable,
-            port: cfg.port,
-            mode: merged.mode,
-            modeSource: merged.modeSource,
-            pendingApprovals,
-            tunnel: cfg.tunnel,
-            workspaces: cfg.workspaces.length,
-          },
-          null,
-          2,
-        ),
-      );
+      printJson({
+        running,
+        daemonReachable,
+        port: cfg.port,
+        mode: merged.mode,
+        modeSource: merged.modeSource,
+        pendingApprovals,
+        tunnel: cfg.tunnel,
+        workspaces: cfg.workspaces.length,
+      });
     });
 
   program
@@ -223,26 +249,65 @@ export function registerDaemon(program: Command): void {
     .option("--follow", "Stream new log lines")
     .option("--limit <n>", "Number of entries", "50")
     .option("--tool <name>", "Filter by tool name")
+    .option("--verbose", "Include event type and client on each line")
+    .option("--legacy", "Compact ISO audit lines (old format)")
+    .option("--main", "Only file edits and shell commands")
     .option("--home <dir>")
-    .action(async (opts: { home?: string; follow?: boolean; limit?: string; tool?: string }) => {
-      const rt = runtimeFromOpts(opts);
-      const limit = Number(opts.limit ?? 50);
-      const { DaemonClient } = await import("@editer/core");
-      const { fetchAuditEvents, followAuditLogs, printAuditEvents } = await import("../log-view.js");
-      const client = DaemonClient.fromPaths(rt.paths);
-      if (opts.follow) {
-        const initial = await fetchAuditEvents(client, rt, { limit, tool: opts.tool });
-        printAuditEvents(initial, true);
-        const ac = new AbortController();
-        process.once("SIGINT", () => ac.abort());
-        console.log("Following logs (Ctrl+C to stop)…");
-        await followAuditLogs(client, rt, { tool: opts.tool, signal: ac.signal });
-        return;
-      }
+    .action(
+      async (opts: {
+        home?: string;
+        follow?: boolean;
+        limit?: string;
+        tool?: string;
+        verbose?: boolean;
+        legacy?: boolean;
+        main?: boolean;
+      }) => {
+        const rt = runtimeFromOpts(opts);
+        const limit = Number(opts.limit ?? 50);
+        const { DaemonClient } = await import("@hands/core");
+        const {
+          fetchAuditEvents,
+          followAuditLogs,
+          printAuditEvents,
+          printMainActivityEvents,
+          formatAuditLineLegacy,
+          resolveActiveWorkspaceId,
+        } = await import("../log-view.js");
+        const client = DaemonClient.fromPaths(rt.paths);
+        const daemonUp = await client.isRunning();
+        const workspaceId = await resolveActiveWorkspaceId(client, rt, daemonUp);
+        const auditFetchOpts = { tool: opts.tool, daemonUp, workspaceId };
 
-      const events = await fetchAuditEvents(client, rt, { limit, tool: opts.tool });
-      printAuditEvents(events, true);
-    });
+        const printBatch = (events: Awaited<ReturnType<typeof fetchAuditEvents>>) => {
+          if (opts.legacy) {
+            const list = [...events].reverse();
+            for (const e of list) writeln(formatAuditLineLegacy(e));
+            return;
+          }
+          if (opts.main) printMainActivityEvents(events, true);
+          else printAuditEvents(events, true, opts.verbose ?? false);
+        };
+
+        if (opts.follow) {
+          const initial = await fetchAuditEvents(client, rt, { limit, ...auditFetchOpts });
+          printBatch(initial);
+          const ac = new AbortController();
+          process.once("SIGINT", () => ac.abort());
+          hint("Following logs (Ctrl+C to stop)…");
+          await followAuditLogs(client, rt, {
+            ...auditFetchOpts,
+            signal: ac.signal,
+            mainOnly: opts.main,
+            verbose: opts.legacy ? false : Boolean(opts.verbose),
+          });
+          return;
+        }
+
+        const events = await fetchAuditEvents(client, rt, { limit, ...auditFetchOpts });
+        printBatch(events);
+      },
+    );
 }
 
 export async function runDefaultSession(dir: string, opts: StartOpts): Promise<void> {
@@ -254,11 +319,15 @@ export async function runDefaultSession(dir: string, opts: StartOpts): Promise<v
 
   const client = DaemonClient.fromPaths(rt.paths);
   if (await client.isRunning()) {
-    const attached = await attachToRunningDaemon(rt, {
-      ...opts,
-      headless: opts.headless ?? false,
-      interactive: !opts.headless,
-    }, root);
+    const attached = await attachToRunningDaemon(
+      rt,
+      {
+        ...opts,
+        headless: opts.headless ?? false,
+        interactive: !opts.headless,
+      },
+      root,
+    );
     if (attached) return;
   }
 

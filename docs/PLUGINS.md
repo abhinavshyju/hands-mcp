@@ -1,9 +1,9 @@
 # Custom tools
 
-Drop a JS module in `~/.editer/tools/` (or `<workspace>/.editer/tools/`). It is loaded through the same registry as built-ins and hot-reloaded on change.
+Drop a JS module in `~/.hands/tools/` (or `<workspace>/.hands/tools/`). It is loaded through the same registry as built-ins and hot-reloaded on change.
 
 ```bash
-editer tool new my_tool
+hands tool new my_tool
 ```
 
 Export shape:
@@ -24,6 +24,6 @@ export default {
 };
 ```
 
-Examples live in `examples/tools/`. Copy them into `~/.editer/tools/` to try.
+Examples live in `examples/tools/`. Copy them into `~/.hands/tools/` to try.
 
 A failed plugin cannot take down the daemon; load errors appear in the UI via `plugin.error` events.

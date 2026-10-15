@@ -1,6 +1,6 @@
 import http from "node:http";
 import { afterAll, describe, expect, it } from "vitest";
-import { EditerError } from "@editer/shared";
+import { HandsError } from "@hands/shared";
 import { BrowserManager, isLocalOrAllowedHost } from "./browser.js";
 import { EventBus } from "./events.js";
 
@@ -13,7 +13,7 @@ describe("navigation policy", () => {
   });
 
   it("rejects non-http schemes", () => {
-    expect(() => isLocalOrAllowedHost("file:///tmp/x")).toThrow(EditerError);
+    expect(() => isLocalOrAllowedHost("file:///tmp/x")).toThrow(HandsError);
   });
 });
 
@@ -49,7 +49,7 @@ describe.skipIf(process.env.EDITER_SKIP_BROWSER === "1")("BrowserManager", () =>
       await mgr.getOrCreate("t");
     } catch (err) {
       await mgr.stopAll();
-      if (err instanceof EditerError && err.code === "BROWSER_UNAVAILABLE") {
+      if (err instanceof HandsError && err.code === "BROWSER_UNAVAILABLE") {
         skip();
         return;
       }

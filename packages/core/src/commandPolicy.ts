@@ -1,4 +1,4 @@
-import { PolicyDeniedError } from "@editer/shared";
+import { PolicyDeniedError } from "@hands/shared";
 
 const DEFAULT_DENY = [
   /\brm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+\/|-[a-zA-Z]*rf[a-zA-Z]*\s+\/|--no-preserve-root)/,

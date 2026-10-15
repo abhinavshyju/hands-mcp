@@ -1,43 +1,43 @@
-# editer CLI
+# hands CLI
 
-Command-Code style control for the editer MCP daemon.
+Command-Code style control for the Hands MCP daemon.
 
 ## One-command start
 
 From any project folder:
 
 ```bash
-editer .
+hands .
 # or
-editer
+hands
 ```
 
 This will:
 
-1. Ensure `~/.editer` exists
-2. Write `.editer/config.json` in the project if missing
+1. Ensure `~/.hands` exists
+2. Write `.hands/config.json` in the project if missing
 3. Register the folder as the active workspace
 4. Start the MCP server in the foreground
-5. Open the interactive console (`y`/`n`/`d`/`a`, `/mode`, `/status`, `/open`, `/quit`)
+5. Open the interactive console (`y`/`n`/`d`/`a`, `/mode`, `/status`, `/open`, `/clear`, `/quit`)
 
 Flags: `--mode`, `--headless`, `--no-tunnel`, `--tunnel`, `--tunnel-quick`, `--open`, `--host`, `--port`, `--home`.
 
-Quitting the console (`/quit`, `q`, or Ctrl+C) stops the MCP server, Cloudflare tunnel, and any background processes started by editer.
+Quitting the console (`/quit`, `q`, or Ctrl+C) stops the MCP server, Cloudflare tunnel, and any background processes started by Hands.
 
 ## Init (without starting server)
 
 ```bash
-editer init [dir] [--mode review|auto|readonly] [--template node|typescript|python]
+hands init [dir] [--mode review|auto|readonly] [--template node|typescript|python]
 ```
 
 ## Mode
 
 ```bash
-editer mode                    # show effective mode + policy
-editer mode set auto           # workspace scope (clears project mode override)
-editer mode set review --project
-editer auto                    # alias for mode set auto
-editer readonly
+hands mode                    # show effective mode + policy
+hands mode set auto           # workspace scope (clears project mode override)
+hands mode set review --project
+hands auto                    # alias for mode set auto
+hands readonly
 ```
 
 ## Review & approvals
@@ -45,62 +45,81 @@ editer readonly
 Subcommands auto-start a background daemon for the active workspace if needed.
 
 ```bash
-editer review
-editer approvals list
-editer approvals approve <id>
-editer approvals approve --all
-editer approvals reject <id>
+hands review
+hands approvals list
+hands approvals approve <id>
+hands approvals approve --all
+hands approvals reject <id>
 ```
 
 ## Workspace
 
 ```bash
-editer workspace add <path>
-editer workspace list
-editer workspace use <id|name>
-editer workspace mode <id> <mode>
-editer workspace init
-editer workspace remove <id>
+hands workspace add <path>
+hands workspace list
+hands workspace use <id|name>
+hands workspace mode <id> <mode>
+hands workspace init
+hands workspace remove <id>
 ```
 
 ## Config
 
 ```bash
-editer config show [--global|--project|--effective]
-editer config get port
-editer config set port 4877
-editer config unset tunnel.hostname
-editer config path [--project]
-editer config edit [--project]
+hands config show [--global|--project|--effective]
+hands config get port
+hands config set port 4877
+hands config unset tunnel.hostname
+hands config path [--project]
+hands config edit [--project]
 ```
 
 ## Daemon
 
 ```bash
-editer start [--headless] [--ensure-workspace <path>]
-editer stop
-editer status
-editer logs [--follow] [--limit 50] [--tool write_file]
+hands start [--headless] [--ensure-workspace <path>]
+hands stop
+hands status
+hands logs [--follow] [--limit 50] [--tool write_file]
 ```
 
-In the interactive console (`editer .`), recent activity prints on start and new lines stream as `[log] …`. Use `/logs`, `/logs 50`, `/logs follow`, `/logs off`.
+In the interactive console (`hands .`), recent activity prints on start in a readable feed (local time, action, command or path, duration), scoped to the **active workspace**. New lines stream automatically. Use `/logs`, `/logs 50`, `/logs all` (verbose metadata), `/logs follow`, `/logs off`. Quitting the interactive session clears audit log files under `~/.hands/logs`. `hands logs` uses the same workspace-scoped format; add `--verbose`, `--main`, or `--legacy` for variants.
+
+## Shell completion
+
+Tab-complete subcommands and common flag values (modes, tunnel modes, MCP clients, workspace ids):
+
+```bash
+# bash / zsh
+eval "$(hands completion bash)"
+
+# fish
+hands completion fish > ~/.config/fish/completions/hands.fish
+
+hands completion install    # print setup for all shells
 ```
+
+The interactive console (`hands .`) and web UI status bar share the same `/` command catalog (Tab completion in the console; type `/` in the UI for suggestions). Slash tokens match `hands` subcommands (e.g. `/auth mode oauth`, `/workspace list`).
 
 ## Cloudflare tunnel
 
 ```bash
-editer tunnel status [--check]
-editer tunnel quick
-editer tunnel token <token> [--hostname host.example.com]
-editer tunnel set --mode quick|token|named|off [--hostname h]
-editer tunnel enable|disable|restart
-editer tunnel install
-editer tunnel setup          # interactive named tunnel
+hands tunnel status [--check]
+hands tunnel quick
+hands tunnel token <token> [--hostname host.example.com]
+hands tunnel set --mode quick|token|named|off [--hostname h]
+hands tunnel enable|disable|restart|start|stop
+hands tunnel install
+hands tunnel login
+hands tunnel create [--name <n>]
+hands tunnel route dns <hostname> [--name <tunnel>]
+hands tunnel list
+hands tunnel setup [--hostname h] [--name n] [--skip-login]
 ```
 
 ## MCP clients
 
 ```bash
-editer connect --client cursor|claude|generic
-editer stdio
+hands connect --client cursor|claude|generic
+hands stdio
 ```

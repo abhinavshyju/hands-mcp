@@ -7,18 +7,17 @@ import {
   DEFAULT_GREP_MATCH_CAP,
   DEFAULT_OUTPUT_BYTES,
   DEFAULT_READ_BYTES,
-  type ClientToken,
   type Limits,
   type MergedConfig,
   type WorkspaceRecord,
-} from "@editer/shared";
+} from "@hands/shared";
 import { ApprovalManager } from "./approvals.js";
 import { AuditLog } from "./audit.js";
 import { loadMerged, loadProjectConfig, mergeConfig } from "./config.js";
 import { EventBus } from "./events.js";
 import { FileLockManager } from "./filelock.js";
 import { resolvePath } from "./jail.js";
-import { resolveEditerPaths, type EditerPaths } from "./paths.js";
+import { resolveHandsPaths, type HandsPaths } from "./paths.js";
 import { BrowserManager } from "./browser.js";
 import { ProcessManager } from "./processes.js";
 import { SymbolIndex } from "./symbols.js";
@@ -35,8 +34,8 @@ export interface RuntimeOptions {
   modeOverride?: MergedConfig["mode"];
 }
 
-export class EditerRuntime {
-  readonly paths: EditerPaths;
+export class HandsRuntime {
+  readonly paths: HandsPaths;
   readonly events: EventBus;
   readonly audit: AuditLog;
   readonly workspaces: WorkspaceRegistry;
@@ -52,10 +51,8 @@ export class EditerRuntime {
   port: number;
   noTunnel: boolean;
   modeOverride?: MergedConfig["mode"];
-  currentClient?: ClientToken;
-
   constructor(opts: RuntimeOptions = {}) {
-    this.paths = resolveEditerPaths(opts.home);
+    this.paths = resolveHandsPaths(opts.home);
     this.events = new EventBus();
     this.audit = new AuditLog(this.paths, this.events);
     this.workspaces = new WorkspaceRegistry(this.paths);
@@ -118,6 +115,11 @@ export class EditerRuntime {
   }
 
   mergeFor(ws: WorkspaceRecord): MergedConfig {
-    return mergeConfig(this.merged().global, loadProjectConfig(ws.root), ws.mode, this.modeOverride);
+    return mergeConfig(
+      this.merged().global,
+      loadProjectConfig(ws.root),
+      ws.mode,
+      this.modeOverride,
+    );
   }
 }

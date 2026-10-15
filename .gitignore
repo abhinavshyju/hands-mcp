@@ -8,10 +8,13 @@ coverage
 .env.*
 .DS_Store
 .editer
+.hands
 apps/ui/dist
 packages/*/dist
 packages/server/ui
 .deploy
 *.tsbuildinfo
-.vscode
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea

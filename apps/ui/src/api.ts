@@ -12,7 +12,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export type ModeSource = "override" | "project" | "workspace" | "default";
-export type TunnelMode = "off" | "quick" | "token" | "named";
+export type TunnelMode = "off" | "quick" | "token" | "named" | "ngrok";
 
 export interface DaemonState {
   version: string;
@@ -35,14 +35,28 @@ export interface DaemonState {
   pendingApprovals: number;
 }
 
+export type AuthMode = "none" | "bearer" | "oauth";
+
 export interface GlobalConfigView {
   host: string;
   port: number;
+  auth?: {
+    mode: AuthMode;
+    oauth?: {
+      scopes?: string[];
+      publicBaseUrl?: string;
+      externalIssuer?: string;
+      allowDcr?: boolean;
+    };
+    loopbackBypass?: boolean;
+  };
+  tokens?: Array<{ id: string; name: string; createdAt: number; revokedAt?: number }>;
   tunnel: {
     enabled: boolean;
     mode?: TunnelMode;
     hostname?: string;
     tokenSet?: boolean;
+    ngrokAuthtokenSet?: boolean;
     quickUrl?: string;
   };
   exposeUiOverTunnel: boolean;
@@ -102,6 +116,7 @@ export interface BrowserSessionInfo {
 export type McpConnectClient = "claude" | "cursor" | "generic";
 
 export interface McpConnectInfo {
+  authMode?: AuthMode;
   client: McpConnectClient;
   url: string;
   json?: {

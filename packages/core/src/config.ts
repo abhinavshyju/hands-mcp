@@ -9,8 +9,8 @@ import {
   type ProjectConfig,
   type WorkspaceMode,
   type WorkspaceRecord,
-} from "@editer/shared";
-import { ensureDir, projectConfigPath, type EditerPaths } from "./paths.js";
+} from "@hands/shared";
+import { ensureDir, projectConfigPath, type HandsPaths } from "./paths.js";
 
 const emptyProject: ProjectConfig = projectConfigSchema.parse({});
 
@@ -18,7 +18,7 @@ export function defaultGlobalConfig(): GlobalConfig {
   return globalConfigSchema.parse({});
 }
 
-export function loadGlobalConfig(paths: EditerPaths): GlobalConfig {
+export function loadGlobalConfig(paths: HandsPaths): GlobalConfig {
   if (!fs.existsSync(paths.globalConfig)) {
     return defaultGlobalConfig();
   }
@@ -26,7 +26,7 @@ export function loadGlobalConfig(paths: EditerPaths): GlobalConfig {
   return globalConfigSchema.parse(raw);
 }
 
-export function saveGlobalConfig(paths: EditerPaths, config: GlobalConfig): void {
+export function saveGlobalConfig(paths: HandsPaths, config: GlobalConfig): void {
   ensureDir(paths.home);
   const parsed = globalConfigSchema.parse(config);
   fs.writeFileSync(paths.globalConfig, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
@@ -74,7 +74,11 @@ export function mergeConfig(
   };
 }
 
-export function loadMerged(paths: EditerPaths, workspaceRoot?: string, override?: WorkspaceMode): MergedConfig {
+export function loadMerged(
+  paths: HandsPaths,
+  workspaceRoot?: string,
+  override?: WorkspaceMode,
+): MergedConfig {
   const global = loadGlobalConfig(paths);
   const resolved = workspaceRoot ? path.resolve(workspaceRoot) : undefined;
   const ws = resolved
@@ -88,7 +92,7 @@ export function loadMerged(paths: EditerPaths, workspaceRoot?: string, override?
 export type ModeWriteScope = "workspace" | "project";
 
 export function setModeScoped(
-  paths: EditerPaths,
+  paths: HandsPaths,
   mode: WorkspaceMode,
   scope: ModeWriteScope,
   workspace: WorkspaceRecord,
@@ -130,7 +134,11 @@ export function getConfigValue(obj: Record<string, unknown>, dotPath: string): u
   return cur;
 }
 
-export function setConfigValue(obj: Record<string, unknown>, dotPath: string, value: unknown): void {
+export function setConfigValue(
+  obj: Record<string, unknown>,
+  dotPath: string,
+  value: unknown,
+): void {
   const parts = dotPath.split(".").filter(Boolean);
   if (parts.length === 0) throw new Error("Empty config key");
   let cur: Record<string, unknown> = obj;
@@ -158,7 +166,11 @@ export function unsetConfigValue(obj: Record<string, unknown>, dotPath: string):
   delete cur[parts[parts.length - 1]!];
 }
 
-export function applyGlobalConfigKey(paths: EditerPaths, key: string, rawValue: string): GlobalConfig {
+export function applyGlobalConfigKey(
+  paths: HandsPaths,
+  key: string,
+  rawValue: string,
+): GlobalConfig {
   const cfg = loadGlobalConfig(paths);
   const obj = { ...cfg } as unknown as Record<string, unknown>;
   setConfigValue(obj, key, parseJsonValue(rawValue));
@@ -167,7 +179,7 @@ export function applyGlobalConfigKey(paths: EditerPaths, key: string, rawValue: 
   return parsed;
 }
 
-export function unsetGlobalConfigKey(paths: EditerPaths, key: string): GlobalConfig {
+export function unsetGlobalConfigKey(paths: HandsPaths, key: string): GlobalConfig {
   const cfg = loadGlobalConfig(paths);
   const obj = structuredClone(cfg) as unknown as Record<string, unknown>;
   unsetConfigValue(obj, key);
@@ -176,7 +188,11 @@ export function unsetGlobalConfigKey(paths: EditerPaths, key: string): GlobalCon
   return parsed;
 }
 
-export function applyProjectConfigKey(workspaceRoot: string, key: string, rawValue: string): ProjectConfig {
+export function applyProjectConfigKey(
+  workspaceRoot: string,
+  key: string,
+  rawValue: string,
+): ProjectConfig {
   const project = loadProjectConfig(workspaceRoot);
   const obj = structuredClone(project) as unknown as Record<string, unknown>;
   setConfigValue(obj, key, parseJsonValue(rawValue));
@@ -207,10 +223,17 @@ export function redactGlobalConfigForApi(cfg: GlobalConfig): Record<string, unkn
       credentialsFile: tunnel.credentialsFile,
       configFile: tunnel.configFile,
       tokenSet: Boolean(tunnel.token),
+      ngrokAuthtokenSet: Boolean(tunnel.ngrokAuthtoken),
       quickUrl: tunnel.quickUrl,
     },
     exposeUiOverTunnel: cfg.exposeUiOverTunnel,
-    tokens: cfg.tokens.map((t) => ({ id: t.id, name: t.name, createdAt: t.createdAt, revokedAt: t.revokedAt })),
+    auth: cfg.auth,
+    tokens: cfg.tokens.map((t) => ({
+      id: t.id,
+      name: t.name,
+      createdAt: t.createdAt,
+      revokedAt: t.revokedAt,
+    })),
     workspaces: cfg.workspaces,
     activeWorkspaceId: cfg.activeWorkspaceId,
     approvalTimeoutMs: cfg.approvalTimeoutMs,

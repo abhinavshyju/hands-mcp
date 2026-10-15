@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { EditerRuntime } from "@editer/core";
+import { HandsRuntime } from "@hands/core";
 import { startServer, type StartedServer } from "./server.js";
 
 describe("e2e mcp smoke", () => {
@@ -14,7 +14,7 @@ describe("e2e mcp smoke", () => {
   it("connects, orients, edits, runs, restores", async () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "editer-e2e-home-"));
     root = fs.mkdtempSync(path.join(os.tmpdir(), "editer-e2e-ws-"));
-    const runtime = new EditerRuntime({
+    const runtime = new HandsRuntime({
       home,
       headless: true,
       noTunnel: true,

@@ -1,4 +1,4 @@
-import { BROWSER_IDLE_MS, EditerError, type BrowserSession } from "@editer/shared";
+import { BROWSER_IDLE_MS, HandsError, type BrowserSession } from "@hands/shared";
 import type { Browser, BrowserContext, ConsoleMessage, Page, Request } from "playwright-core";
 import type { EventBus } from "./events.js";
 
@@ -45,10 +45,10 @@ export function isLocalOrAllowedHost(url: string, extraHosts: string[] = []): bo
   try {
     parsed = new URL(url);
   } catch {
-    throw new EditerError("BROWSER_BAD_URL", `Invalid URL: ${url}`);
+    throw new HandsError("BROWSER_BAD_URL", `Invalid URL: ${url}`);
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new EditerError(
+    throw new HandsError(
       "BROWSER_BAD_URL",
       `Only http(s) URLs are allowed, got ${parsed.protocol}`,
     );
@@ -142,7 +142,7 @@ export class BrowserManager {
   async page(name: string): Promise<Page> {
     const session = this.sessions.get(name);
     if (!session) {
-      throw new EditerError(
+      throw new HandsError(
         "BROWSER_NO_SESSION",
         `No browser session named "${name}". Call browser_navigate first.`,
       );
@@ -154,7 +154,7 @@ export class BrowserManager {
   async session(name: string): Promise<Session> {
     const session = this.sessions.get(name);
     if (!session) {
-      throw new EditerError(
+      throw new HandsError(
         "BROWSER_NO_SESSION",
         `No browser session named "${name}". Call browser_navigate first.`,
       );
@@ -166,7 +166,7 @@ export class BrowserManager {
   drain(name: string): BrowserBuffers {
     const session = this.sessions.get(name);
     if (!session) {
-      throw new EditerError("BROWSER_NO_SESSION", `No browser session named "${name}".`);
+      throw new HandsError("BROWSER_NO_SESSION", `No browser session named "${name}".`);
     }
     const out = {
       console: [...session.console],
@@ -183,7 +183,7 @@ export class BrowserManager {
   peek(name: string): BrowserBuffers {
     const session = this.sessions.get(name);
     if (!session) {
-      throw new EditerError("BROWSER_NO_SESSION", `No browser session named "${name}".`);
+      throw new HandsError("BROWSER_NO_SESSION", `No browser session named "${name}".`);
     }
     return {
       console: [...session.console],
@@ -252,7 +252,7 @@ export class BrowserManager {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new EditerError(
+      throw new HandsError(
         "BROWSER_UNAVAILABLE",
         `Chromium is not installed for Playwright. Run: npx playwright install chromium\n${message}`,
       );

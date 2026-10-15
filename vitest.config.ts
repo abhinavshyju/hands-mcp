@@ -13,10 +13,10 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@editer/shared": path.join(root, "packages/shared/src/index.ts"),
-      "@editer/core": path.join(root, "packages/core/src/index.ts"),
-      "@editer/tools": path.join(root, "packages/tools/src/index.ts"),
-      "@editer/server": path.join(root, "packages/server/src/index.ts"),
+      "@hands/shared": path.join(root, "packages/shared/src/index.ts"),
+      "@hands/core": path.join(root, "packages/core/src/index.ts"),
+      "@hands/tools": path.join(root, "packages/tools/src/index.ts"),
+      "@hands/server": path.join(root, "packages/server/src/index.ts"),
     },
   },
 });

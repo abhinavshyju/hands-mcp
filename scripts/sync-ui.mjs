@@ -8,7 +8,7 @@ const uiSrc = path.join(root, "apps/ui/dist");
 const uiDest = path.join(root, "packages/server/ui");
 
 if (!fs.existsSync(uiSrc)) {
-  console.warn(`sync-ui: missing ${uiSrc} (run pnpm --filter @editer/ui build first)`);
+  console.warn(`sync-ui: missing ${uiSrc} (run pnpm --filter @hands/ui build first)`);
   process.exit(0);
 }
 

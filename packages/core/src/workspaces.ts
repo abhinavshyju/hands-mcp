@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { type WorkspaceMode, type WorkspaceRecord } from "@editer/shared";
+import { type WorkspaceMode, type WorkspaceRecord } from "@hands/shared";
 import { loadGlobalConfig, saveGlobalConfig } from "./config.js";
-import type { EditerPaths } from "./paths.js";
+import type { HandsPaths } from "./paths.js";
 
 export class WorkspaceRegistry {
-  constructor(private readonly paths: EditerPaths) {}
+  constructor(private readonly paths: HandsPaths) {}
 
   list(): WorkspaceRecord[] {
     return loadGlobalConfig(this.paths).workspaces;
@@ -73,7 +73,7 @@ export class WorkspaceRegistry {
 
   requireActive(): WorkspaceRecord {
     const active = this.getActive();
-    if (!active) throw new Error("No workspace registered. Run `editer workspace add <path>`.");
+    if (!active) throw new Error("No workspace registered. Run `hands workspace add <path>`.");
     return active;
   }
 }

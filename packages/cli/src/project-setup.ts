@@ -4,12 +4,13 @@ import {
   ensureDir,
   loadGlobalConfig,
   loadProjectConfig,
+  migrateDefaultProjectDir,
   saveGlobalConfig,
   saveProjectConfig,
   scaffoldProject,
-  type EditerRuntime,
-} from "@editer/core";
-import { projectConfigSchema, type WorkspaceMode } from "@editer/shared";
+  type HandsRuntime,
+} from "@hands/core";
+import { HANDS_DIRNAME, projectConfigSchema, type WorkspaceMode } from "@hands/shared";
 
 export interface EnsureProjectOptions {
   mode?: WorkspaceMode;
@@ -18,7 +19,7 @@ export interface EnsureProjectOptions {
   name?: string;
 }
 
-export function ensureGlobalHome(rt: EditerRuntime): void {
+export function ensureGlobalHome(rt: HandsRuntime): void {
   ensureDir(rt.paths.home);
   ensureDir(rt.paths.pluginDir);
   saveGlobalConfig(rt.paths, loadGlobalConfig(rt.paths));
@@ -32,7 +33,8 @@ export function ensureProjectDir(root: string, opts: EnsureProjectOptions = {}):
   if (opts.template) {
     scaffoldProject(resolved, opts.template);
   }
-  ensureDir(path.join(resolved, ".editer"));
+  migrateDefaultProjectDir(resolved);
+  ensureDir(path.join(resolved, HANDS_DIRNAME));
   const existing = loadProjectConfig(resolved);
   const project = projectConfigSchema.parse({
     ...existing,
@@ -42,6 +44,11 @@ export function ensureProjectDir(root: string, opts: EnsureProjectOptions = {}):
   return resolved;
 }
 
-export function registerProjectWorkspace(rt: EditerRuntime, root: string, name?: string, mode?: WorkspaceMode) {
+export function registerProjectWorkspace(
+  rt: HandsRuntime,
+  root: string,
+  name?: string,
+  mode?: WorkspaceMode,
+) {
   return rt.workspaces.add(root, name, mode ?? "review");
 }

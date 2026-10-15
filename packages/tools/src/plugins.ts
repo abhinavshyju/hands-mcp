@@ -4,7 +4,8 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import type { ToolRegistry } from "./registry.js";
 import type { ToolDefinition } from "./types.js";
-import type { EditerRuntime } from "@editer/core";
+import type { HandsRuntime } from "@hands/core";
+import { HANDS_DIRNAME, LEGACY_EDITER_DIRNAME } from "@hands/shared";
 
 const pluginExportSchema = z.object({
   name: z.string(),
@@ -24,14 +25,16 @@ export class PluginLoader {
   private watchers: fs.FSWatcher[] = [];
 
   constructor(
-    private readonly runtime: EditerRuntime,
+    private readonly runtime: HandsRuntime,
     private readonly registry: ToolRegistry,
   ) {}
 
   dirs(): string[] {
     const dirs = [this.runtime.paths.pluginDir];
     try {
-      dirs.push(path.join(this.runtime.workspace().root, ".editer", "tools"));
+      const root = this.runtime.workspace().root;
+      dirs.push(path.join(root, HANDS_DIRNAME, "tools"));
+      dirs.push(path.join(root, LEGACY_EDITER_DIRNAME, "tools"));
     } catch {
       // no workspace yet
     }
@@ -45,7 +48,9 @@ export class PluginLoader {
     this.errors = [];
     for (const dir of this.dirs()) {
       if (!fs.existsSync(dir)) continue;
-      const files = fs.readdirSync(dir).filter((f) => f.endsWith(".js") || f.endsWith(".mjs") || f.endsWith(".ts"));
+      const files = fs
+        .readdirSync(dir)
+        .filter((f) => f.endsWith(".js") || f.endsWith(".mjs") || f.endsWith(".ts"));
       for (const file of files) {
         await this.loadFile(path.join(dir, file));
       }
@@ -98,10 +103,10 @@ export class PluginLoader {
 }
 
 export function pluginScaffold(name: string): string {
-  return `/** @type {import("@editer/tools").ToolDefinition} */
+  return `/** @type {import("@hands/tools").ToolDefinition} */
 export default {
   name: ${JSON.stringify(name)},
-  description: "Custom editer tool: ${name}",
+  description: "Custom Hands tool: ${name}",
   schema: { parse: (args) => args },
   async handler(ctx, args) {
     return { ok: true, workspace: ctx.runtime.workspace().root, args };

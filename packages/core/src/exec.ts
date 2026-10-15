@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { DEFAULT_COMMAND_TIMEOUT_MS, DEFAULT_OUTPUT_BYTES } from "@editer/shared";
+import { DEFAULT_COMMAND_TIMEOUT_MS, DEFAULT_OUTPUT_BYTES } from "@hands/shared";
 import { redactText } from "./redact.js";
 
 export interface ExecResult {
@@ -11,12 +11,7 @@ export interface ExecResult {
   truncated: boolean;
 }
 
-const SCRUB_KEYS = [
-  "EDITER_TOKEN",
-  "EDITER_BEARER",
-  "ANTHROPIC_API_KEY",
-  "OPENAI_API_KEY",
-];
+const SCRUB_KEYS = ["EDITER_TOKEN", "EDITER_BEARER", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"];
 
 export function scrubEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...base };

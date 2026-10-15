@@ -7,35 +7,47 @@ import {
   multiEdit,
   strReplace,
   writeFile,
-} from "@editer/core";
-import { defineTool } from "./types.js";
+  type EditOptions,
+} from "@hands/core";
+import { defineTool, type ToolContext } from "./types.js";
+
+const EDIT_FOOTER =
+  " Supported sources are auto-formatted with Prettier when .hands/config.json formatOnEdit is true. Call get_coding_guidance before large refactors.";
+
+function editFormatOptions(ctx: ToolContext): EditOptions {
+  return { formatOnEdit: ctx.runtime.merged().project.formatOnEdit };
+}
 
 export const editTools = [
   defineTool({
     name: "write_file",
-    description: "Create or overwrite a file with the given contents. Deterministic; preserves line endings.",
+    description:
+      "Create or overwrite a file with the given contents. Deterministic; preserves line endings." +
+      EDIT_FOOTER,
     group: "edit",
     mutating: true,
     schema: z.object({ path: z.string(), contents: z.string() }),
-    handler: (ctx, args) => {
+    handler: async (ctx, args) => {
       const abs = ctx.runtime.resolve(args.path, "write");
-      return writeFile(abs, args.contents);
+      return writeFile(abs, args.contents, editFormatOptions(ctx));
     },
   }),
   defineTool({
     name: "create_file",
-    description: "Create a new file. Fails if it already exists.",
+    description: "Create a new file. Fails if it already exists." + EDIT_FOOTER,
     group: "edit",
     mutating: true,
     schema: z.object({ path: z.string(), contents: z.string() }),
-    handler: (ctx, args) => {
+    handler: async (ctx, args) => {
       const abs = ctx.runtime.resolve(args.path, "write");
-      return createFile(abs, args.contents);
+      return createFile(abs, args.contents, editFormatOptions(ctx));
     },
   }),
   defineTool({
     name: "str_replace",
-    description: "Exact string replacement. Fails if the match is missing or not unique unless expected_occurrences is set.",
+    description:
+      "Exact string replacement. Fails if the match is missing or not unique unless expected_occurrences is set." +
+      EDIT_FOOTER,
     group: "edit",
     mutating: true,
     schema: z.object({
@@ -44,14 +56,20 @@ export const editTools = [
       new_string: z.string(),
       expected_occurrences: z.number().int().positive().optional(),
     }),
-    handler: (ctx, args) => {
+    handler: async (ctx, args) => {
       const abs = ctx.runtime.resolve(args.path, "write");
-      return strReplace(abs, args.old_string, args.new_string, args.expected_occurrences);
+      return strReplace(
+        abs,
+        args.old_string,
+        args.new_string,
+        args.expected_occurrences,
+        editFormatOptions(ctx),
+      );
     },
   }),
   defineTool({
     name: "multi_edit",
-    description: "Apply several str_replace operations to one file transactionally.",
+    description: "Apply several str_replace operations to one file transactionally." + EDIT_FOOTER,
     group: "edit",
     mutating: true,
     schema: z.object({
@@ -66,20 +84,24 @@ export const editTools = [
         )
         .min(1),
     }),
-    handler: (ctx, args) => {
+    handler: async (ctx, args) => {
       const abs = ctx.runtime.resolve(args.path, "write");
-      return multiEdit(abs, args.edits);
+      return multiEdit(abs, args.edits, editFormatOptions(ctx));
     },
   }),
   defineTool({
     name: "apply_patch",
-    description: "Apply a unified diff. Strict hunk verification; all-or-nothing across files.",
+    description:
+      "Apply a unified diff. Strict hunk verification; all-or-nothing across files." + EDIT_FOOTER,
     group: "edit",
     mutating: true,
     schema: z.object({ patch: z.string() }),
-    handler: (ctx, args) =>
-      applyPatchToFiles(ctx.runtime.workspace().root, args.patch, (rel) =>
-        ctx.runtime.resolve(rel, "write"),
+    handler: async (ctx, args) =>
+      applyPatchToFiles(
+        ctx.runtime.workspace().root,
+        args.patch,
+        (rel) => ctx.runtime.resolve(rel, "write"),
+        editFormatOptions(ctx),
       ),
   }),
   defineTool({

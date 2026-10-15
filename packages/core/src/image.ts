@@ -1,4 +1,4 @@
-import { EditerError } from "@editer/shared";
+import { HandsError } from "@hands/shared";
 
 export interface GeneratedImage {
   mimeType: string;
@@ -32,13 +32,13 @@ export function samplingImageSource(client: SamplingClient | undefined): ImageSo
   return {
     async generate(prompt: string): Promise<GeneratedImage> {
       if (!client) {
-        throw new EditerError(
+        throw new HandsError(
           "SAMPLING_UNAVAILABLE",
           "this client does not advertise sampling capability",
         );
       }
       if (!client.available()) {
-        throw new EditerError(
+        throw new HandsError(
           "SAMPLING_UNAVAILABLE",
           "this client does not advertise sampling capability",
         );
@@ -48,7 +48,7 @@ export function samplingImageSource(client: SamplingClient | undefined): ImageSo
       const image = blocks.find((b) => b.type === "image" && typeof b.data === "string");
       if (!image?.data) {
         const kinds = blocks.map((b) => b.type).join(", ") || "empty";
-        throw new EditerError(
+        throw new HandsError(
           "SAMPLING_NOT_IMAGE",
           `the model returned text instead of an image (content types: ${kinds})`,
         );

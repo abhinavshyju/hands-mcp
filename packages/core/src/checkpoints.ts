@@ -4,26 +4,26 @@ import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   CHECKPOINT_META,
-  EDITER_DIRNAME,
+  HANDS_DIRNAME,
   SHADOW_GIT_DIR,
   type CheckpointRecord,
   checkpointRecordSchema,
   EditError,
-} from "@editer/shared";
-import { ensureDir, projectEditerDir } from "./paths.js";
+} from "@hands/shared";
+import { ensureDir, projectHandsDir } from "./paths.js";
 
 function gitEnv(workspaceRoot: string): NodeJS.ProcessEnv {
-  const dir = path.join(projectEditerDir(workspaceRoot), SHADOW_GIT_DIR);
-  const index = path.join(projectEditerDir(workspaceRoot), "shadow.index");
+  const dir = path.join(projectHandsDir(workspaceRoot), SHADOW_GIT_DIR);
+  const index = path.join(projectHandsDir(workspaceRoot), "shadow.index");
   return {
     ...process.env,
     GIT_DIR: dir,
     GIT_WORK_TREE: workspaceRoot,
     GIT_INDEX_FILE: index,
-    GIT_AUTHOR_NAME: "editer",
-    GIT_AUTHOR_EMAIL: "editer@local",
-    GIT_COMMITTER_NAME: "editer",
-    GIT_COMMITTER_EMAIL: "editer@local",
+    GIT_AUTHOR_NAME: "hands",
+    GIT_AUTHOR_EMAIL: "hands@local",
+    GIT_COMMITTER_NAME: "hands",
+    GIT_COMMITTER_EMAIL: "hands@local",
   };
 }
 
@@ -40,7 +40,7 @@ function git(workspaceRoot: string, args: string[]): string {
 }
 
 export function initShadowGit(workspaceRoot: string): void {
-  const dir = path.join(projectEditerDir(workspaceRoot), SHADOW_GIT_DIR);
+  const dir = path.join(projectHandsDir(workspaceRoot), SHADOW_GIT_DIR);
   ensureDir(path.dirname(dir));
   if (!fs.existsSync(path.join(dir, "HEAD"))) {
     fs.mkdirSync(dir, { recursive: true });
@@ -53,13 +53,13 @@ export function initShadowGit(workspaceRoot: string): void {
   ensureDir(exclude);
   fs.writeFileSync(
     path.join(exclude, "exclude"),
-    `${EDITER_DIRNAME}/\n.git/\nnode_modules/\n`,
+    `${HANDS_DIRNAME}/\n.git/\nnode_modules/\n`,
     "utf8",
   );
 }
 
 function metaPath(workspaceRoot: string): string {
-  return path.join(projectEditerDir(workspaceRoot), CHECKPOINT_META);
+  return path.join(projectHandsDir(workspaceRoot), CHECKPOINT_META);
 }
 
 export function listCheckpoints(workspaceRoot: string): CheckpointRecord[] {
@@ -79,7 +79,9 @@ export function snapshotFiles(
   meta: { tool: string; clientName?: string; message?: string },
 ): CheckpointRecord {
   initShadowGit(workspaceRoot);
-  const rels = files.map((f) => path.relative(workspaceRoot, f)).filter((r) => r && !r.startsWith(".."));
+  const rels = files
+    .map((f) => path.relative(workspaceRoot, f))
+    .filter((r) => r && !r.startsWith(".."));
   for (const rel of rels) {
     const abs = path.join(workspaceRoot, rel);
     if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
@@ -110,7 +112,7 @@ export function snapshotFiles(
     sha,
     message,
   };
-  ensureDir(projectEditerDir(workspaceRoot));
+  ensureDir(projectHandsDir(workspaceRoot));
   fs.appendFileSync(metaPath(workspaceRoot), `${JSON.stringify(rec)}\n`, "utf8");
   return rec;
 }
@@ -147,7 +149,15 @@ export function userGitState(workspaceRoot: string): { head: string; status: str
   delete env.GIT_DIR;
   delete env.GIT_WORK_TREE;
   delete env.GIT_INDEX_FILE;
-  const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: workspaceRoot, env, encoding: "utf8" });
-  const status = spawnSync("git", ["status", "--porcelain"], { cwd: workspaceRoot, env, encoding: "utf8" });
+  const head = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: workspaceRoot,
+    env,
+    encoding: "utf8",
+  });
+  const status = spawnSync("git", ["status", "--porcelain"], {
+    cwd: workspaceRoot,
+    env,
+    encoding: "utf8",
+  });
   return { head: head.stdout.trim(), status: status.stdout };
 }

@@ -1,9 +1,9 @@
 import type { z, ZodTypeAny } from "zod";
-import type { PolicyAction, ToolGroup } from "@editer/shared";
-import type { EditerRuntime, SamplingClient } from "@editer/core";
+import type { PolicyAction, ToolGroup } from "@hands/shared";
+import type { HandsRuntime, SamplingClient } from "@hands/core";
 
 export interface ToolContext {
-  runtime: EditerRuntime;
+  runtime: HandsRuntime;
   clientId?: string;
   clientName?: string;
   sampling?: SamplingClient;

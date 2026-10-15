@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { gitBranch, gitCommit, gitDiff, gitLog, gitStatus } from "@editer/core";
+import { gitBranch, gitCommit, gitDiff, gitLog, gitStatus } from "@hands/core";
 import { defineTool } from "./types.js";
 
 export const gitTools = [

@@ -1,19 +1,29 @@
 import fs from "node:fs";
 import path from "node:path";
-import { EditError } from "@editer/shared";
+import { EditError } from "@hands/shared";
 import { atomicWriteFile } from "./atomicWrite.js";
-import { unifiedDiff } from "./diffutil.js";
+import { type EditOptions, type EditWriteResult, finalizeTextEdit } from "./editFormat.js";
 
-export function writeFile(abs: string, contents: string): { diff: string } {
+export type { EditOptions, EditWriteResult };
+
+export async function writeFile(
+  abs: string,
+  contents: string,
+  options: EditOptions = {},
+): Promise<EditWriteResult> {
   const before = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
   atomicWriteFile(abs, contents);
-  return { diff: unifiedDiff(path.basename(abs), before, contents) };
+  return finalizeTextEdit(abs, before, options);
 }
 
-export function createFile(abs: string, contents: string): { diff: string } {
+export async function createFile(
+  abs: string,
+  contents: string,
+  options: EditOptions = {},
+): Promise<EditWriteResult> {
   if (fs.existsSync(abs)) throw new EditError(`File already exists: ${abs}`);
   atomicWriteFile(abs, contents, { preserveLineEndings: false });
-  return { diff: unifiedDiff(path.basename(abs), "", contents) };
+  return finalizeTextEdit(abs, "", options);
 }
 
 export function deletePath(abs: string): void {
@@ -29,12 +39,13 @@ export function movePath(from: string, to: string): void {
   fs.renameSync(from, to);
 }
 
-export function strReplace(
+export async function strReplace(
   abs: string,
   oldString: string,
   newString: string,
   expectedOccurrences?: number,
-): { diff: string; occurrences: number } {
+  options: EditOptions = {},
+): Promise<EditWriteResult & { occurrences: number }> {
   if (!fs.existsSync(abs)) throw new EditError(`File does not exist: ${abs}`);
   const before = fs.readFileSync(abs, "utf8");
   if (oldString.length === 0) throw new EditError("old_string must not be empty");
@@ -62,22 +73,26 @@ export function strReplace(
 
   const after = before.split(oldString).join(newString);
   atomicWriteFile(abs, after);
-  return { diff: unifiedDiff(path.basename(abs), before, after), occurrences: count };
+  const finalized = await finalizeTextEdit(abs, before, options);
+  return { ...finalized, occurrences: count };
 }
 
-export function multiEdit(
+export async function multiEdit(
   abs: string,
   edits: Array<{ old_string: string; new_string: string; expected_occurrences?: number }>,
-): { diff: string } {
+  options: EditOptions = {},
+): Promise<EditWriteResult> {
   if (!fs.existsSync(abs)) throw new EditError(`File does not exist: ${abs}`);
   const original = fs.readFileSync(abs, "utf8");
   let current = original;
   try {
     for (const [i, edit] of edits.entries()) {
-      const tmp = `${abs}.__editer_multi`;
+      const tmp = `${abs}.__hands_multi`;
       fs.writeFileSync(tmp, current, "utf8");
       try {
-        strReplace(tmp, edit.old_string, edit.new_string, edit.expected_occurrences);
+        await strReplace(tmp, edit.old_string, edit.new_string, edit.expected_occurrences, {
+          formatOnEdit: false,
+        });
         current = fs.readFileSync(tmp, "utf8");
       } catch (err) {
         throw new EditError(
@@ -88,7 +103,7 @@ export function multiEdit(
       }
     }
     atomicWriteFile(abs, current);
-    return { diff: unifiedDiff(path.basename(abs), original, current) };
+    return finalizeTextEdit(abs, original, options);
   } catch (err) {
     atomicWriteFile(abs, original);
     throw err;

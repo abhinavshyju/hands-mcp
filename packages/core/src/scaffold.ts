@@ -11,8 +11,8 @@ const TEMPLATES: Record<string, Record<string, string>> = {
   "scripts": { "start": "node index.js", "test": "node --test" }
 }
 `,
-    "index.js": `console.log("hello from editer");\n`,
-    "README.md": `# app\n\nScaffolded by editer-mcp.\n`,
+    "index.js": `console.log("hello from Hands");\n`,
+    "README.md": `# app\n\nScaffolded by hands-mcp.\n`,
   },
   typescript: {
     "package.json": `{
@@ -27,19 +27,22 @@ const TEMPLATES: Record<string, Record<string, string>> = {
   "include": ["src"]
 }
 `,
-    "src/index.ts": `console.log("hello from editer");\n`,
-    "README.md": `# app\n\nTypeScript scaffold from editer-mcp.\n`,
+    "src/index.ts": `console.log("hello from Hands");\n`,
+    "README.md": `# app\n\nTypeScript scaffold from hands-mcp.\n`,
   },
   python: {
     "pyproject.toml": `[project]\nname = "app"\nversion = "0.1.0"\n`,
-    "main.py": `def main():\n    print("hello from editer")\n\nif __name__ == "__main__":\n    main()\n`,
-    "README.md": `# app\n\nPython scaffold from editer-mcp.\n`,
+    "main.py": `def main():\n    print("hello from Hands")\n\nif __name__ == "__main__":\n    main()\n`,
+    "README.md": `# app\n\nPython scaffold from hands-mcp.\n`,
   },
 };
 
 export function scaffoldProject(root: string, template: string): string[] {
   const files = TEMPLATES[template];
-  if (!files) throw new Error(`Unknown template: ${template}. Available: ${Object.keys(TEMPLATES).join(", ")}`);
+  if (!files)
+    throw new Error(
+      `Unknown template: ${template}. Available: ${Object.keys(TEMPLATES).join(", ")}`,
+    );
   const written: string[] = [];
   for (const [rel, contents] of Object.entries(files)) {
     const abs = path.join(root, rel);

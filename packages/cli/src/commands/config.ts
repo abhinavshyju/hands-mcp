@@ -14,41 +14,44 @@ import {
   projectConfigPath,
   unsetGlobalConfigKey,
   unsetProjectConfigKey,
-} from "@editer/core";
+} from "@hands/core";
 import { runtimeFromOpts } from "../runtime-opts.js";
+import { hint, printJson, success, writeln } from "../ui/render.js";
 
 export function registerConfig(program: Command): void {
-  const cfg = program.command("config").description("View and edit editer configuration");
+  const cfg = program.command("config").description("View and edit Hands configuration");
 
   cfg
     .command("show")
-    .option("--global", "Global ~/.editer/config.json")
-    .option("--project", "Project .editer/config.json")
+    .option("--global", "Global ~/.hands/config.json")
+    .option("--project", "Project .hands/config.json")
     .option("--effective", "Merged effective config")
     .option("--home <dir>")
-    .action(async (opts: { global?: boolean; project?: boolean; effective?: boolean; home?: string }) => {
-      const rt = runtimeFromOpts(opts);
-      const client = DaemonClient.fromPaths(rt.paths);
-      if (opts.effective) {
-        if (await client.isRunning()) {
-          console.log(JSON.stringify(await client.effectiveConfig(), null, 2));
+    .action(
+      async (opts: { global?: boolean; project?: boolean; effective?: boolean; home?: string }) => {
+        const rt = runtimeFromOpts(opts);
+        const client = DaemonClient.fromPaths(rt.paths);
+        if (opts.effective) {
+          if (await client.isRunning()) {
+            printJson(await client.effectiveConfig());
+            return;
+          }
+          printJson(loadMerged(rt.paths));
           return;
         }
-        console.log(JSON.stringify(loadMerged(rt.paths), null, 2));
-        return;
-      }
-      if (opts.project) {
-        const ws = rt.workspaces.getActive();
-        if (!ws) throw new Error("No active workspace");
-        console.log(JSON.stringify(loadProjectConfig(ws.root), null, 2));
-        return;
-      }
-      if (await client.isRunning()) {
-        console.log(JSON.stringify(await client.globalConfig(), null, 2));
-        return;
-      }
-      console.log(JSON.stringify(loadGlobalConfig(rt.paths), null, 2));
-    });
+        if (opts.project) {
+          const ws = rt.workspaces.getActive();
+          if (!ws) throw new Error("No active workspace");
+          printJson(loadProjectConfig(ws.root));
+          return;
+        }
+        if (await client.isRunning()) {
+          printJson(await client.globalConfig());
+          return;
+        }
+        printJson(loadGlobalConfig(rt.paths));
+      },
+    );
 
   cfg
     .command("get")
@@ -59,12 +62,18 @@ export function registerConfig(program: Command): void {
       const rt = runtimeFromOpts(opts);
       if (opts.project) {
         const ws = rt.workspaces.requireActive();
-        const val = getConfigValue(loadProjectConfig(ws.root) as unknown as Record<string, unknown>, key);
-        console.log(JSON.stringify(val ?? null));
+        const val = getConfigValue(
+          loadProjectConfig(ws.root) as unknown as Record<string, unknown>,
+          key,
+        );
+        writeln(JSON.stringify(val ?? null));
         return;
       }
-      const val = getConfigValue(loadGlobalConfig(rt.paths) as unknown as Record<string, unknown>, key);
-      console.log(JSON.stringify(val ?? null));
+      const val = getConfigValue(
+        loadGlobalConfig(rt.paths) as unknown as Record<string, unknown>,
+        key,
+      );
+      writeln(JSON.stringify(val ?? null));
     });
 
   cfg
@@ -85,14 +94,14 @@ export function registerConfig(program: Command): void {
             loadProjectConfig(ws.root) as unknown as Record<string, unknown>,
           );
         }
-        console.log("OK");
+        success("OK");
         return;
       }
       applyGlobalConfigKey(rt.paths, key, value);
       if (await client.isRunning()) {
-        console.log("(daemon running — restart editer for some global changes to apply)");
+        hint("(daemon running — restart hands for some global changes to apply)");
       }
-      console.log("OK");
+      success("OK");
     });
 
   cfg
@@ -108,7 +117,7 @@ export function registerConfig(program: Command): void {
       } else {
         unsetGlobalConfigKey(rt.paths, key);
       }
-      console.log("OK");
+      success("OK");
     });
 
   cfg
@@ -119,10 +128,10 @@ export function registerConfig(program: Command): void {
       const rt = runtimeFromOpts(opts);
       if (opts.project) {
         const ws = rt.workspaces.requireActive();
-        console.log(projectConfigPath(ws.root));
+        writeln(projectConfigPath(ws.root));
         return;
       }
-      console.log(rt.paths.globalConfig);
+      writeln(rt.paths.globalConfig);
     });
 
   cfg

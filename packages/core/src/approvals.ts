@@ -1,9 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  ApprovalDeniedError,
-  type ApprovalRequest,
-  type ToolGroup,
-} from "@editer/shared";
+import { ApprovalDeniedError, type ApprovalRequest, type ToolGroup } from "@hands/shared";
 import type { EventBus } from "./events.js";
 import type { AuditLog } from "./audit.js";
 
@@ -76,7 +72,6 @@ export class ApprovalManager {
 
     this.audit.record({ type: "approval.requested", tool: input.tool, args: request });
     this.events.emit("approval.requested", request);
-    for (const s of this.surfaces) s(request);
 
     const approved = await new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => {
@@ -89,6 +84,7 @@ export class ApprovalManager {
           resolve(ok);
         },
       });
+      for (const s of this.surfaces) s(request);
     });
 
     if (!approved) {

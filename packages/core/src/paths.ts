@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { EDITER_DIRNAME } from "@editer/shared";
+import { HANDS_DIRNAME, LEGACY_EDITER_DIRNAME } from "@hands/shared";
+import { migrateLegacyDirIfNeeded } from "./migrate.js";
 
-export interface EditerPaths {
+export interface HandsPaths {
   home: string;
   globalConfig: string;
   logs: string;
@@ -13,12 +14,19 @@ export interface EditerPaths {
   pidFile: string;
 }
 
-export function editerHome(override?: string): string {
-  return override ?? process.env.EDITER_HOME ?? path.join(os.homedir(), EDITER_DIRNAME);
+export function handsHome(override?: string): string {
+  if (override) return override;
+  if (process.env.HANDS_HOME) return process.env.HANDS_HOME;
+  if (process.env.EDITER_HOME) return process.env.EDITER_HOME;
+
+  const newHome = path.join(os.homedir(), HANDS_DIRNAME);
+  const legacyHome = path.join(os.homedir(), LEGACY_EDITER_DIRNAME);
+  migrateLegacyDirIfNeeded(legacyHome, newHome);
+  return newHome;
 }
 
-export function resolveEditerPaths(homeOverride?: string): EditerPaths {
-  const home = editerHome(homeOverride);
+export function resolveHandsPaths(homeOverride?: string): HandsPaths {
+  const home = handsHome(homeOverride);
   return {
     home,
     globalConfig: path.join(home, "config.json"),
@@ -26,7 +34,7 @@ export function resolveEditerPaths(homeOverride?: string): EditerPaths {
     bin: path.join(home, "bin"),
     tunnel: path.join(home, "tunnel"),
     pluginDir: path.join(home, "tools"),
-    pidFile: path.join(home, "editer.pid"),
+    pidFile: path.join(home, "hands.pid"),
   };
 }
 
@@ -34,10 +42,10 @@ export function ensureDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-export function projectEditerDir(workspaceRoot: string): string {
-  return path.join(workspaceRoot, EDITER_DIRNAME);
+export function projectHandsDir(workspaceRoot: string): string {
+  return path.join(workspaceRoot, HANDS_DIRNAME);
 }
 
 export function projectConfigPath(workspaceRoot: string): string {
-  return path.join(projectEditerDir(workspaceRoot), "config.json");
+  return path.join(projectHandsDir(workspaceRoot), "config.json");
 }

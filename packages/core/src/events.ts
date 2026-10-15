@@ -1,4 +1,4 @@
-import type { ControlEvent } from "@editer/shared";
+import type { ControlEvent } from "@hands/shared";
 
 type Handler = (event: ControlEvent) => void;
 

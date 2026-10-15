@@ -1,5 +1,7 @@
-import type { AuditEvent } from "@editer/shared";
-import type { DaemonClient, EditerRuntime } from "@editer/core";
+import type { AuditEvent } from "@hands/shared";
+import type { DaemonClient, HandsRuntime } from "@hands/core";
+import { formatColoredActivityLines } from "./ui/activity.js";
+import { hint } from "./ui/render.js";
 
 /** Tools shown in the interactive console (edits, shell, git restore — not reads/meta). */
 const MAIN_ACTIVITY_TOOLS = new Set([
@@ -26,33 +28,60 @@ export function filterMainActivity(events: AuditEvent[]): AuditEvent[] {
   return events.filter(isMainActivityEvent);
 }
 
-function activityDetail(e: AuditEvent): string {
-  const args = e.args as Record<string, unknown> | undefined;
-  if (!args) return "";
-  if (typeof args.path === "string") return args.path;
-  if (typeof args.from === "string" && typeof args.to === "string") {
-    return `${args.from} → ${args.to}`;
+function terminalWidth(): number {
+  if (typeof process.stdout.columns === "number" && process.stdout.columns > 0) {
+    return process.stdout.columns;
   }
-  if (typeof args.command === "string") {
-    const cmd = args.command.trim();
-    return cmd.length > 72 ? `${cmd.slice(0, 69)}…` : cmd;
-  }
-  if (typeof args.message === "string") return args.message;
-  if (typeof args.id === "string") return args.id.slice(0, 12);
-  return "";
+  return 80;
 }
 
-/** Short line for console: `write_file  src/app.ts` */
+function printActivityEvent(e: AuditEvent, verbose = false): void {
+  for (const line of formatColoredActivityLines(e, {
+    verbose,
+    terminalWidth: terminalWidth(),
+  })) {
+    console.log(line);
+  }
+}
+
+/** Short line for console (multi-line human-readable block). */
 export function formatMainActivityLine(e: AuditEvent): string {
-  if (e.type === "tool.error") {
-    return `✗ ${e.tool}: ${e.error ?? "failed"}`;
-  }
-  const tool = e.tool ?? "tool";
-  const detail = activityDetail(e);
-  return detail ? `${tool}  ${detail}` : tool;
+  return formatColoredActivityLines(e, { verbose: false, terminalWidth: terminalWidth() }).join(
+    "\n",
+  );
 }
 
+/** Verbose audit line (human-readable with type/client meta). */
 export function formatAuditLine(e: AuditEvent): string {
+  return formatColoredActivityLines(e, { verbose: true, terminalWidth: terminalWidth() }).join(
+    "\n",
+  );
+}
+
+export function printMainActivityEvents(events: AuditEvent[], chronological = true): void {
+  const list = filterMainActivity(chronological ? [...events].reverse() : events);
+  if (list.length === 0) {
+    hint("(no recent file or command activity)");
+    return;
+  }
+  for (const e of list) {
+    printActivityEvent(e, false);
+  }
+}
+
+export function printAuditEvents(events: AuditEvent[], chronological = true, verbose = true): void {
+  const list = chronological ? [...events].reverse() : events;
+  if (list.length === 0) {
+    hint("(no log entries)");
+    return;
+  }
+  for (const e of list) {
+    printActivityEvent(e, verbose);
+  }
+}
+
+/** Legacy compact ISO line (for `hands logs --verbose-legacy` if needed). */
+export function formatAuditLineLegacy(e: AuditEvent): string {
   const ts = new Date(e.ts).toISOString();
   const parts = [ts, e.type];
   if (e.clientName) parts.push(`client=${e.clientName}`);
@@ -62,43 +91,55 @@ export function formatAuditLine(e: AuditEvent): string {
   return parts.join(" ");
 }
 
-export function printMainActivityEvents(events: AuditEvent[], chronological = true): void {
-  const list = filterMainActivity(chronological ? [...events].reverse() : events);
-  if (list.length === 0) {
-    console.log("(no recent file or command activity)");
-    return;
-  }
-  for (const e of list) {
-    console.log(formatMainActivityLine(e));
-  }
-}
+export type AuditFetchOpts = {
+  limit?: number;
+  tool?: string;
+  daemonUp?: boolean;
+  workspaceId?: string;
+  all?: boolean;
+};
 
-export function printAuditEvents(events: AuditEvent[], chronological = true): void {
-  const list = chronological ? [...events].reverse() : events;
-  if (list.length === 0) {
-    console.log("(no log entries)");
-    return;
+export async function resolveActiveWorkspaceId(
+  client: DaemonClient,
+  rt: HandsRuntime,
+  daemonUp = false,
+): Promise<string | undefined> {
+  if (daemonUp || (await client.isRunning())) {
+    try {
+      const st = await client.state();
+      return st.workspace?.id;
+    } catch {
+      // fall through
+    }
   }
-  for (const e of list) {
-    console.log(formatAuditLine(e));
-  }
+  return rt.workspaces.getActive()?.id;
 }
 
 export async function fetchAuditEvents(
   client: DaemonClient,
-  rt: EditerRuntime,
-  opts: { limit?: number; tool?: string; daemonUp?: boolean } = {},
+  rt: HandsRuntime,
+  opts: AuditFetchOpts = {},
 ): Promise<AuditEvent[]> {
   const limit = opts.limit ?? 50;
+  const queryOpts = {
+    limit,
+    tool: opts.tool,
+    workspaceId: opts.all ? undefined : opts.workspaceId,
+  };
   if (opts.daemonUp || (await client.isRunning())) {
-    return client.audit({ limit, tool: opts.tool });
+    return client.audit({
+      limit,
+      tool: opts.tool,
+      all: opts.all,
+      workspaceId: opts.all ? undefined : opts.workspaceId,
+    });
   }
-  return rt.audit.query({ limit, tool: opts.tool });
+  return rt.audit.query(queryOpts);
 }
 
 export async function followAuditLogs(
   client: DaemonClient,
-  rt: EditerRuntime,
+  rt: HandsRuntime,
   opts: {
     limit?: number;
     tool?: string;
@@ -106,15 +147,21 @@ export async function followAuditLogs(
     signal?: AbortSignal;
     daemonUp?: boolean;
     mainOnly?: boolean;
+    verbose?: boolean;
+    workspaceId?: string;
+    all?: boolean;
   },
 ): Promise<void> {
   const seen = new Set<string>();
   const intervalMs = opts.intervalMs ?? 500;
-  const initial = await fetchAuditEvents(client, rt, {
+  const fetchOpts = {
     limit: opts.limit ?? 30,
     tool: opts.tool,
     daemonUp: opts.daemonUp,
-  });
+    workspaceId: opts.workspaceId,
+    all: opts.all,
+  };
+  const initial = await fetchAuditEvents(client, rt, fetchOpts);
   for (const e of initial) seen.add(e.id);
 
   while (!opts.signal?.aborted) {
@@ -123,12 +170,14 @@ export async function followAuditLogs(
       limit: 20,
       tool: opts.tool,
       daemonUp: opts.daemonUp,
+      workspaceId: opts.workspaceId,
+      all: opts.all,
     });
     for (const e of batch) {
       if (seen.has(e.id)) continue;
       seen.add(e.id);
       if (opts.mainOnly && !isMainActivityEvent(e)) continue;
-      console.log(opts.mainOnly ? formatMainActivityLine(e) : formatAuditLine(e));
+      printActivityEvent(e, opts.verbose ?? !opts.mainOnly);
     }
   }
 }

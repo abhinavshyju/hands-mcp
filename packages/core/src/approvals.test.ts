@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ApprovalDeniedError } from "@editer/shared";
+import { ApprovalDeniedError } from "@hands/shared";
 import { ApprovalManager } from "./approvals.js";
 import { AuditLog } from "./audit.js";
 import { EventBus } from "./events.js";
-import { resolveEditerPaths } from "./paths.js";
+import { resolveHandsPaths } from "./paths.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,7 +11,7 @@ import path from "node:path";
 function mgr(timeout = 50): ApprovalManager {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "editer-appr-"));
   const events = new EventBus();
-  const audit = new AuditLog(resolveEditerPaths(home), events);
+  const audit = new AuditLog(resolveHandsPaths(home), events);
   return new ApprovalManager(events, audit, timeout);
 }
 

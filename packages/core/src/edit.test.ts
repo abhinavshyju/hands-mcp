@@ -12,52 +12,58 @@ function tmp(): string {
 }
 
 describe("edit engine", () => {
-  it("preserves CRLF", () => {
+  it("preserves CRLF", async () => {
     const dir = tmp();
     const file = path.join(dir, "a.txt");
     fs.writeFileSync(file, "hello\r\nworld\r\n");
-    writeFile(file, "hello\nthere\n");
+    await writeFile(file, "hello\nthere\n", { formatOnEdit: false });
     expect(fs.readFileSync(file, "utf8")).toBe("hello\r\nthere\r\n");
   });
 
-  it("create_file fails if exists", () => {
+  it("create_file fails if exists", async () => {
     const dir = tmp();
     const file = path.join(dir, "a.txt");
-    createFile(file, "x");
-    expect(() => createFile(file, "y")).toThrow(/already exists/);
+    await createFile(file, "x", { formatOnEdit: false });
+    await expect(createFile(file, "y", { formatOnEdit: false })).rejects.toThrow(/already exists/);
   });
 
-  it("rejects ambiguous str_replace", () => {
+  it("rejects ambiguous str_replace", async () => {
     const dir = tmp();
     const file = path.join(dir, "a.txt");
     fs.writeFileSync(file, "foo\nfoo\n");
-    expect(() => strReplace(file, "foo", "bar")).toThrow(/matched 2 times/);
+    await expect(
+      strReplace(file, "foo", "bar", undefined, { formatOnEdit: false }),
+    ).rejects.toThrow(/matched 2 times/);
     expect(fs.readFileSync(file, "utf8")).toBe("foo\nfoo\n");
   });
 
-  it("replaces expected occurrences", () => {
+  it("replaces expected occurrences", async () => {
     const dir = tmp();
     const file = path.join(dir, "a.txt");
     fs.writeFileSync(file, "foo\nfoo\n");
-    strReplace(file, "foo", "bar", 2);
+    await strReplace(file, "foo", "bar", 2, { formatOnEdit: false });
     expect(fs.readFileSync(file, "utf8")).toBe("bar\nbar\n");
   });
 
-  it("multi_edit rolls back if a later step fails", () => {
+  it("multi_edit rolls back if a later step fails", async () => {
     const dir = tmp();
     const file = path.join(dir, "a.txt");
     fs.writeFileSync(file, "one\ntwo\nthree\n");
-    expect(() =>
-      multiEdit(file, [
-        { old_string: "one", new_string: "ONE" },
-        { old_string: "two", new_string: "TWO" },
-        { old_string: "missing", new_string: "x" },
-      ]),
-    ).toThrow(/step 3/);
+    await expect(
+      multiEdit(
+        file,
+        [
+          { old_string: "one", new_string: "ONE" },
+          { old_string: "two", new_string: "TWO" },
+          { old_string: "missing", new_string: "x" },
+        ],
+        { formatOnEdit: false },
+      ),
+    ).rejects.toThrow(/step 3/);
     expect(fs.readFileSync(file, "utf8")).toBe("one\ntwo\nthree\n");
   });
 
-  it("rejects a drifted patch and leaves the file untouched", () => {
+  it("rejects a drifted patch and leaves the file untouched", async () => {
     const dir = tmp();
     const file = path.join(dir, "a.txt");
     fs.writeFileSync(file, "alpha\nbeta\ngamma\n");
@@ -69,13 +75,13 @@ describe("edit engine", () => {
 +beta2
  gamma
 `;
-    expect(() =>
-      applyPatchToFiles(dir, patch, (rel) => path.join(dir, rel)),
-    ).toThrow(/drifted|mismatch/);
+    await expect(
+      applyPatchToFiles(dir, patch, (rel) => path.join(dir, rel), { formatOnEdit: false }),
+    ).rejects.toThrow(/drifted|mismatch/);
     expect(fs.readFileSync(file, "utf8")).toBe("alpha\nbeta\ngamma\n");
   });
 
-  it("applies a valid unified diff", () => {
+  it("applies a valid unified diff", async () => {
     const dir = tmp();
     const file = path.join(dir, "a.txt");
     fs.writeFileSync(file, "alpha\nbeta\ngamma\n");
@@ -87,7 +93,7 @@ describe("edit engine", () => {
 +beta2
  gamma
 `;
-    applyPatchToFiles(dir, patch, (rel) => path.join(dir, rel));
+    await applyPatchToFiles(dir, patch, (rel) => path.join(dir, rel), { formatOnEdit: false });
     expect(fs.readFileSync(file, "utf8")).toBe("alpha\nbeta2\ngamma\n");
   });
 });

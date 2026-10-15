@@ -1,0 +1,35 @@
+:root {
+  --wb-bg: #1e1e1e;
+  --wb-sidebar: #252526;
+  --wb-activity: #333333;
+  --wb-editor: #1e1e1e;
+  --wb-border: #3c3c3c;
+  --wb-text: #cccccc;
+  --wb-muted: #858585;
+  --wb-accent: #0e639c;
+  --wb-accent-hover: #1177bb;
+  --wb-status: #007acc;
+  --wb-status-warn: #cc6633;
+  --wb-status-error: #a1260d;
+  --wb-tab-active: #1e1e1e;
+  --wb-tab-inactive: #2d2d2d;
+  --wb-list-hover: #2a2d2e;
+  --wb-list-active: #37373d;
+  --wb-input-bg: #3c3c3c;
+  --wb-badge: #d7ba7d;
+  --wb-focus: #007fd4;
+  --wb-titlebar: #323233;
+  --wb-font-ui: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --wb-font-mono: ui-monospace, "Cascadia Code", "SF Mono", monospace;
+  --wb-activity-width: 48px;
+  --wb-status-height: 22px;
+  --wb-tab-height: 35px;
+  --wb-sidebar-header: 35px;
+  --wb-transition: 120ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --wb-transition: 0ms;
+  }
+}

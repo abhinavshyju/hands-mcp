@@ -1,7 +1,7 @@
 import fs from "node:fs";
-import { DaemonClient, type EditerPaths } from "@editer/core";
+import { DaemonClient, type HandsPaths } from "@hands/core";
 
-export async function stopEditerDaemon(paths: EditerPaths): Promise<boolean> {
+export async function stopHandsDaemon(paths: HandsPaths): Promise<boolean> {
   const client = DaemonClient.fromPaths(paths);
   if (await client.isRunning()) {
     try {

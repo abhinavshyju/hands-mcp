@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { AuthError } from "@editer/shared";
-import { EditerRuntime } from "@editer/core";
+import { AuthError } from "@hands/shared";
+import { HandsRuntime } from "@hands/core";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,7 +8,7 @@ import path from "node:path";
 describe("bearer tokens via runtime", () => {
   it("rejects missing/wrong and accepts valid; identity is available", () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "editer-auth-"));
-    const rt = new EditerRuntime({ home });
+    const rt = new HandsRuntime({ home });
     const t = rt.tokens.create("inspector");
     expect(() => rt.tokens.authenticate(undefined)).toThrow(AuthError);
     expect(() => rt.tokens.authenticate("nope")).toThrow(AuthError);

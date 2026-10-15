@@ -6,8 +6,8 @@ import {
   type ConsoleEntry,
   type FailedRequestEntry,
   type PageErrorEntry,
-} from "@editer/core";
-import { DEFAULT_INLINE_MEDIA_BYTES } from "@editer/shared";
+} from "@hands/core";
+import { DEFAULT_INLINE_MEDIA_BYTES } from "@hands/shared";
 import { defineTool, type ToolContext } from "./types.js";
 import { mediaFromBuffer, withMedia } from "./media.js";
 
@@ -47,7 +47,8 @@ async function snapshotAria(page: {
 export const browserTools = [
   defineTool({
     name: "browser_navigate",
-    description: "Open or reuse a named browser session and navigate to a URL. Localhost is allowed; other hosts need approval in auto mode and in review.",
+    description:
+      "Open or reuse a named browser session and navigate to a URL. Localhost is allowed; other hosts need approval in auto mode and in review.",
     group: "browser",
     mutating: true,
     schema: z.object({
@@ -73,7 +74,8 @@ export const browserTools = [
   }),
   defineTool({
     name: "browser_screenshot",
-    description: "Capture the current page (or a CSS selector) as a PNG. Saved under .editer/media/ and returned as an image.",
+    description:
+      "Capture the current page (or a CSS selector) as a PNG. Saved under .hands/media/ and returned as an image.",
     group: "browser",
     mutating: false,
     schema: z.object({
@@ -85,8 +87,7 @@ export const browserTools = [
     handler: async (ctx, args) => {
       const page = await ctx.runtime.browser.page(args.session);
       const shot = async (type: "png" | "jpeg", quality?: number): Promise<Buffer> => {
-        const opts =
-          type === "jpeg" ? { type, quality: quality ?? 60 } : { type };
+        const opts = type === "jpeg" ? { type, quality: quality ?? 60 } : { type };
         if (args.selector) {
           return Buffer.from(await page.locator(args.selector).first().screenshot(opts));
         }
@@ -101,7 +102,7 @@ export const browserTools = [
       const rel =
         args.path ??
         path.posix.join(
-          ".editer/media",
+          ".hands/media",
           `shot-${args.session}-${Date.now()}.${mimeType === "image/jpeg" ? "jpg" : "png"}`,
         );
       const abs = ctx.runtime.resolve(rel, "write");
@@ -121,7 +122,8 @@ export const browserTools = [
   }),
   defineTool({
     name: "browser_snapshot",
-    description: "Return an accessibility tree of the current page. Prefer this over a screenshot for structure.",
+    description:
+      "Return an accessibility tree of the current page. Prefer this over a screenshot for structure.",
     group: "browser",
     mutating: false,
     schema: z.object({ session: sessionArg }),
@@ -158,7 +160,10 @@ export const browserTools = [
     }),
     handler: async (ctx, args) => {
       const page = await ctx.runtime.browser.page(args.session);
-      await page.locator(args.selector).first().pressSequentially(args.text, { delay: args.delayMs });
+      await page
+        .locator(args.selector)
+        .first()
+        .pressSequentially(args.text, { delay: args.delayMs });
       return { session: args.session };
     },
   }),
@@ -227,12 +232,15 @@ export const browserTools = [
     handler: async (ctx, args) => {
       const page = await ctx.runtime.browser.page(args.session);
       if (args.selector) {
-        await page.locator(args.selector).first().evaluate(
-          (el: { scrollBy: (x: number, y: number) => void }, delta: { x: number; y: number }) => {
-            el.scrollBy(delta.x, delta.y);
-          },
-          { x: args.x, y: args.y },
-        );
+        await page
+          .locator(args.selector)
+          .first()
+          .evaluate(
+            (el: { scrollBy: (x: number, y: number) => void }, delta: { x: number; y: number }) => {
+              el.scrollBy(delta.x, delta.y);
+            },
+            { x: args.x, y: args.y },
+          );
       } else {
         await page.mouse.wheel(args.x, args.y);
       }
@@ -254,7 +262,8 @@ export const browserTools = [
     }),
     handler: async (ctx, args) => {
       const page = await ctx.runtime.browser.page(args.session);
-      if (args.selector) await page.locator(args.selector).first().waitFor({ timeout: args.timeoutMs });
+      if (args.selector)
+        await page.locator(args.selector).first().waitFor({ timeout: args.timeoutMs });
       if (args.text) await page.getByText(args.text).first().waitFor({ timeout: args.timeoutMs });
       if (args.url) await page.waitForURL(args.url, { timeout: args.timeoutMs });
       if (args.networkIdle) await page.waitForLoadState("networkidle", { timeout: args.timeoutMs });
@@ -301,7 +310,8 @@ export const browserTools = [
   }),
   defineTool({
     name: "browser_assert",
-    description: "Structured assertion against the page: selector visible, text present, URL match, or count.",
+    description:
+      "Structured assertion against the page: selector visible, text present, URL match, or count.",
     group: "browser",
     mutating: false,
     schema: z.object({
@@ -318,7 +328,8 @@ export const browserTools = [
         const loc = page.locator(args.selector);
         const n = await loc.count();
         if (args.count !== undefined) {
-          if (n !== args.count) failures.push(`expected ${args.count} of ${args.selector}, got ${n}`);
+          if (n !== args.count)
+            failures.push(`expected ${args.count} of ${args.selector}, got ${n}`);
         } else if (n === 0) {
           failures.push(`selector not found: ${args.selector}`);
         }

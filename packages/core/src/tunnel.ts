@@ -2,8 +2,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
-import { APP_NAME, type TunnelConfig, type TunnelMode } from "@editer/shared";
-import type { EditerPaths } from "./paths.js";
+import { APP_NAME, type TunnelConfig, type TunnelMode } from "@hands/shared";
+import type { HandsPaths } from "./paths.js";
 import { ensureDir } from "./paths.js";
 import type { EventBus } from "./events.js";
 import { loadGlobalConfig, saveGlobalConfig } from "./config.js";
@@ -21,6 +21,28 @@ export interface TunnelState {
 export function parseQuickTunnelUrl(text: string): string | undefined {
   const m = text.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/i);
   return m?.[0];
+}
+
+/** Parse ngrok agent stdout (classic or log lines). */
+export function parseNgrokPublicUrl(text: string): string | undefined {
+  const fwd = text.match(/https:\/\/[\w.-]+\.ngrok(?:-[\w]+)?\.(?:app|dev|io)\b/i);
+  if (fwd) return fwd[0];
+  const jsonUrl = text.match(/"url"\s*:\s*"(https:\/\/[^"]+)"/);
+  if (jsonUrl?.[1]?.includes("ngrok")) return jsonUrl[1];
+  return undefined;
+}
+
+export function findNgrokBinary(paths: HandsPaths): string {
+  const local = path.join(paths.bin, "ngrok");
+  if (fs.existsSync(local)) return local;
+  for (const c of ["/usr/local/bin/ngrok", "/usr/bin/ngrok"]) {
+    if (fs.existsSync(c)) return c;
+  }
+  return "ngrok";
+}
+
+export function buildNgrokArgs(localPort: number): string[] {
+  return ["http", String(localPort), "--log=stdout", "--log-format=logfmt"];
 }
 
 export function effectiveTunnelMode(cfg: TunnelConfig): TunnelMode {
@@ -45,7 +67,7 @@ export function buildCloudflaredArgs(cfg: TunnelConfig, localPort: number): stri
     if (cfg.tunnelName) {
       return ["tunnel", "run", cfg.tunnelName];
     }
-    throw new Error("Named tunnel not configured (run editer tunnel setup)");
+    throw new Error("Named tunnel not configured (run hands tunnel setup)");
   }
   throw new Error("Tunnel is off");
 }
@@ -56,7 +78,7 @@ export class TunnelSupervisor {
   private stopping = false;
 
   constructor(
-    private readonly paths: EditerPaths,
+    private readonly paths: HandsPaths,
     private readonly events: EventBus,
     private readonly localPort: number,
   ) {}
@@ -91,7 +113,9 @@ export class TunnelSupervisor {
     return dest;
   }
 
-  async applyConfig(patch: Partial<TunnelConfig> & { exposeUiOverTunnel?: boolean }): Promise<TunnelState> {
+  async applyConfig(
+    patch: Partial<TunnelConfig> & { exposeUiOverTunnel?: boolean },
+  ): Promise<TunnelState> {
     const cfg = loadGlobalConfig(this.paths);
     if (patch.exposeUiOverTunnel !== undefined) {
       cfg.exposeUiOverTunnel = patch.exposeUiOverTunnel;
@@ -121,9 +145,17 @@ export class TunnelSupervisor {
     this.stopping = false;
     let bin: string;
     let args: string[];
+    let spawnEnv: NodeJS.ProcessEnv | undefined;
     try {
-      bin = await this.ensureBinary();
-      args = buildCloudflaredArgs(cfg.tunnel, this.localPort);
+      if (mode === "ngrok") {
+        bin = findNgrokBinary(this.paths);
+        args = buildNgrokArgs(this.localPort);
+        const token = cfg.tunnel.ngrokAuthtoken ?? process.env.NGROK_AUTHTOKEN;
+        spawnEnv = token ? { ...process.env, NGROK_AUTHTOKEN: token } : process.env;
+      } else {
+        bin = await this.ensureBinary();
+        args = buildCloudflaredArgs(cfg.tunnel, this.localPort);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.state = {
@@ -146,12 +178,21 @@ export class TunnelSupervisor {
       status: "starting",
     };
     this.events.emit("tunnel.status", this.state);
-    this.spawnLoop(bin, args, mode);
+    this.spawnLoop(bin, args, mode, 0, spawnEnv);
   }
 
-  private spawnLoop(bin: string, args: string[], mode: TunnelMode, attempt = 0): void {
+  private spawnLoop(
+    bin: string,
+    args: string[],
+    mode: TunnelMode,
+    attempt = 0,
+    spawnEnv?: NodeJS.ProcessEnv,
+  ): void {
     if (this.stopping) return;
-    const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(bin, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: spawnEnv ?? process.env,
+    });
     this.child = child;
     const onOut = (d: Buffer) => {
       const text = d.toString("utf8");
@@ -161,13 +202,11 @@ export class TunnelSupervisor {
       }
       if (mode === "quick") {
         const url = parseQuickTunnelUrl(text);
-        if (url) {
-          this.state = { ...this.state, quickUrl: url, hostname: url.replace(/^https:\/\//, ""), healthy: true, status: "connected" };
-          this.events.emit("tunnel.status", this.state);
-          const cfg = loadGlobalConfig(this.paths);
-          cfg.tunnel = { ...cfg.tunnel, quickUrl: url, hostname: url.replace(/^https:\/\//, "") };
-          saveGlobalConfig(this.paths, cfg);
-        }
+        if (url) this.applyPublicTunnelUrl(url);
+      }
+      if (mode === "ngrok") {
+        const url = parseNgrokPublicUrl(text);
+        if (url) this.applyPublicTunnelUrl(url);
       }
       if (/error|ERR|failed/i.test(text) && !/level=error/i.test(text)) {
         this.state = { ...this.state, lastError: text.trim().slice(0, 500) };
@@ -181,9 +220,24 @@ export class TunnelSupervisor {
       this.events.emit("tunnel.status", this.state);
       if (!this.stopping) {
         const delay = Math.min(30_000, 1000 * 2 ** attempt);
-        setTimeout(() => this.spawnLoop(bin, args, mode, attempt + 1), delay);
+        setTimeout(() => this.spawnLoop(bin, args, mode, attempt + 1, spawnEnv), delay);
       }
     });
+  }
+
+  private applyPublicTunnelUrl(url: string): void {
+    this.state = {
+      ...this.state,
+      quickUrl: url,
+      hostname: url.replace(/^https:\/\//, ""),
+      healthy: true,
+      status: "connected",
+      lastError: undefined,
+    };
+    this.events.emit("tunnel.status", this.state);
+    const cfg = loadGlobalConfig(this.paths);
+    cfg.tunnel = { ...cfg.tunnel, quickUrl: url, hostname: url.replace(/^https:\/\//, "") };
+    saveGlobalConfig(this.paths, cfg);
   }
 
   async stop(): Promise<void> {
@@ -231,7 +285,12 @@ function downloadFile(url: string, dest: string): Promise<void> {
     const file = fs.createWriteStream(dest);
     https
       .get(url, { headers: { "User-Agent": APP_NAME } }, (res) => {
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        if (
+          res.statusCode &&
+          res.statusCode >= 300 &&
+          res.statusCode < 400 &&
+          res.headers.location
+        ) {
           file.close();
           fs.unlinkSync(dest);
           downloadFile(res.headers.location, dest).then(resolve, reject);
@@ -248,7 +307,10 @@ function downloadFile(url: string, dest: string): Promise<void> {
   });
 }
 
-export function writeTunnelConfig(paths: EditerPaths, opts: { tunnelId: string; credentialsFile: string; hostname: string; port: number }): string {
+export function writeTunnelConfig(
+  paths: HandsPaths,
+  opts: { tunnelId: string; credentialsFile: string; hostname: string; port: number },
+): string {
   ensureDir(paths.tunnel);
   const configFile = path.join(paths.tunnel, "config.yml");
   const body = `tunnel: ${opts.tunnelId}

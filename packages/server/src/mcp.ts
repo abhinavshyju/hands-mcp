@@ -11,10 +11,16 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import { APP_NAME, APP_VERSION } from "@editer/shared";
-import type { EditerRuntime } from "@editer/core";
-import { globSearch } from "@editer/core";
-import { splitToolResult, type ToolRegistry } from "@editer/tools";
+import {
+  APP_NAME,
+  APP_VERSION,
+  CODING_STANDARDS_RESOURCE_URI,
+  mergeWorkspaceGuidance,
+} from "@hands/shared";
+import type { HandsRuntime } from "@hands/core";
+import { getAuthContext } from "@hands/core";
+import { globSearch } from "@hands/core";
+import { splitToolResult, type ToolRegistry } from "@hands/tools";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -24,7 +30,7 @@ export interface CreatedMcpServer {
   dispose: () => void;
 }
 
-export function createMcpServer(runtime: EditerRuntime, registry: ToolRegistry): CreatedMcpServer {
+export function createMcpServer(runtime: HandsRuntime, registry: ToolRegistry): CreatedMcpServer {
   const server = new Server(
     { name: APP_NAME, version: APP_VERSION },
     {
@@ -46,13 +52,14 @@ export function createMcpServer(runtime: EditerRuntime, registry: ToolRegistry):
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     try {
+      const auth = getAuthContext();
       const result = await runtime.locks.withFileLock("global-tool", async () =>
         registry.invoke(
           req.params.name,
           {
             runtime,
-            clientId: runtime.currentClient?.id,
-            clientName: runtime.currentClient?.name ?? "mcp",
+            clientId: auth?.clientId,
+            clientName: auth?.clientName ?? "mcp",
             sampling: {
               available: () => Boolean(server.getClientCapabilities()?.sampling),
               createMessage: async (prompt: string) => {
@@ -115,13 +122,24 @@ export function createMcpServer(runtime: EditerRuntime, registry: ToolRegistry):
       req.params.name === "fix_bug"
         ? String((req.params.arguments as { symptom?: string } | undefined)?.symptom ?? "")
         : String((req.params.arguments as { request?: string } | undefined)?.request ?? "");
+    const { text: guidance } = mergeWorkspaceGuidance(runtime.workspace().root);
     return {
       messages: [
         {
           role: "user" as const,
           content: {
             type: "text" as const,
-            text: `You are connected to editer-mcp on a local machine. Use the tools to inspect and edit the workspace.\n\nProject overview:\n${JSON.stringify(overview, null, 2)}\n\nTask: ${extra}`,
+            text: `You are connected to Hands (hands-mcp) on a local machine. Use the tools to inspect and edit the workspace.
+
+Before editing: follow the coding standards below (or call get_coding_guidance / read ${CODING_STANDARDS_RESOURCE_URI}). Prefer the smallest correct change; match existing style; avoid speculative abstractions.
+
+Coding standards:
+${guidance}
+
+Project overview:
+${JSON.stringify(overview, null, 2)}
+
+Task: ${extra}`,
           },
         },
       ],
@@ -129,23 +147,38 @@ export function createMcpServer(runtime: EditerRuntime, registry: ToolRegistry):
   });
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    const guidanceResource = {
+      uri: CODING_STANDARDS_RESOURCE_URI,
+      name: "coding-standards",
+      description: "Modular edit standards and anti-slop guidance for this workspace",
+      mimeType: "text/plain",
+    };
     try {
       const files = globSearch(runtime.workspace().root, "**/*", 100);
       return {
-        resources: files.map((f) => ({
-          uri: `editer://workspace/${f}`,
-          name: f,
-          mimeType: "text/plain",
-        })),
+        resources: [
+          guidanceResource,
+          ...files.map((f) => ({
+            uri: `hands://workspace/${f}`,
+            name: f,
+            mimeType: "text/plain",
+          })),
+        ],
       };
     } catch {
-      return { resources: [] };
+      return { resources: [guidanceResource] };
     }
   });
 
   server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
     const uri = req.params.uri;
-    const rel = uri.replace(/^editer:\/\/workspace\//, "");
+    if (uri === CODING_STANDARDS_RESOURCE_URI) {
+      const { text } = mergeWorkspaceGuidance(runtime.workspace().root);
+      return {
+        contents: [{ uri, mimeType: "text/plain", text: text.slice(0, 100_000) }],
+      };
+    }
+    const rel = uri.replace(/^hands:\/\/workspace\//, "");
     const abs = runtime.resolve(rel, "read");
     const text = fs.readFileSync(abs, "utf8");
     return {
@@ -160,7 +193,7 @@ export function createMcpServer(runtime: EditerRuntime, registry: ToolRegistry):
   return { server, dispose };
 }
 
-export async function serveStdio(runtime: EditerRuntime, registry: ToolRegistry): Promise<void> {
+export async function serveStdio(runtime: HandsRuntime, registry: ToolRegistry): Promise<void> {
   const { server } = createMcpServer(runtime, registry);
   const transport = new StdioServerTransport();
   await server.connect(transport);

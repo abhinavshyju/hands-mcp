@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { APP_NAME, APP_VERSION } from "@editer/shared";
-import { getProjectOverview } from "@editer/core";
+import { APP_NAME, APP_VERSION, mergeWorkspaceGuidance } from "@hands/shared";
+import { getProjectOverview } from "@hands/core";
 import { defineTool } from "./types.js";
 
 export const metaTools = [
@@ -69,10 +69,23 @@ export const metaTools = [
   }),
   defineTool({
     name: "get_project_overview",
-    description: "Cheap orientation: languages, package manager, scripts, entrypoints, top-level tree, README excerpt.",
+    description:
+      "Cheap orientation: languages, package manager, scripts, entrypoints, top-level tree, README excerpt.",
     group: "meta",
     mutating: false,
     schema: z.object({}),
     handler: (ctx) => getProjectOverview(ctx.runtime.workspace().root),
+  }),
+  defineTool({
+    name: "get_coding_guidance",
+    description:
+      "Standards for modular, minimal edits when using hands edit tools. Call before large refactors.",
+    group: "meta",
+    mutating: false,
+    schema: z.object({}),
+    handler: (ctx) => {
+      const { text, sources } = mergeWorkspaceGuidance(ctx.runtime.workspace().root);
+      return { guidance: text, sources };
+    },
   }),
 ];

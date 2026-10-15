@@ -32,16 +32,20 @@ export function getProjectOverview(root: string): ProjectOverview {
   if (entries.includes("pnpm-lock.yaml")) packageManager = "pnpm";
   else if (entries.includes("yarn.lock")) packageManager = "yarn";
   else if (entries.includes("bun.lockb") || entries.includes("bun.lock")) packageManager = "bun";
-  else if (entries.includes("package-lock.json") || entries.includes("package.json")) packageManager = "npm";
+  else if (entries.includes("package-lock.json") || entries.includes("package.json"))
+    packageManager = "npm";
   else if (entries.includes("Cargo.toml")) packageManager = "cargo";
   else if (entries.includes("go.mod")) packageManager = "go";
-  else if (entries.includes("pyproject.toml") || entries.includes("requirements.txt")) packageManager = "pip";
+  else if (entries.includes("pyproject.toml") || entries.includes("requirements.txt"))
+    packageManager = "pip";
 
   let scripts: Record<string, string> = {};
   const pkgPath = path.join(root, "package.json");
   if (fs.existsSync(pkgPath)) {
     try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8")) as { scripts?: Record<string, string> };
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8")) as {
+        scripts?: Record<string, string>;
+      };
       scripts = pkg.scripts ?? {};
     } catch {
       scripts = {};
@@ -54,9 +58,14 @@ export function getProjectOverview(root: string): ProjectOverview {
     .sort()
     .slice(0, 40);
 
-  const entrypoints = ["src/index.ts", "src/main.ts", "src/index.js", "main.py", "cmd/main.go", "src/main.rs"].filter(
-    (p) => fs.existsSync(path.join(root, p)),
-  );
+  const entrypoints = [
+    "src/index.ts",
+    "src/main.ts",
+    "src/index.js",
+    "main.py",
+    "cmd/main.go",
+    "src/main.rs",
+  ].filter((p) => fs.existsSync(path.join(root, p)));
 
   let readme: string | null = null;
   const readmeFile = entries.find((e) => e.toLowerCase().startsWith("readme"));
@@ -86,8 +95,13 @@ export function resolveScript(
     if (pm === "bun") return `bun run ${kind}`;
     return `npm run ${kind}`;
   }
-  if (fs.existsSync(path.join(root, "Cargo.toml"))) return `cargo ${kind === "test" ? "test" : kind === "build" ? "build" : "clippy"}`;
-  if (fs.existsSync(path.join(root, "go.mod"))) return kind === "test" ? "go test ./..." : kind === "build" ? "go build ./..." : "go vet ./...";
-  if (fs.existsSync(path.join(root, "pyproject.toml"))) return kind === "test" ? "pytest" : kind === "lint" ? "ruff check ." : "python -m build";
-  throw new Error(`Could not detect a ${kind} command. Set it in .editer/config.json scripts.${kind}`);
+  if (fs.existsSync(path.join(root, "Cargo.toml")))
+    return `cargo ${kind === "test" ? "test" : kind === "build" ? "build" : "clippy"}`;
+  if (fs.existsSync(path.join(root, "go.mod")))
+    return kind === "test" ? "go test ./..." : kind === "build" ? "go build ./..." : "go vet ./...";
+  if (fs.existsSync(path.join(root, "pyproject.toml")))
+    return kind === "test" ? "pytest" : kind === "lint" ? "ruff check ." : "python -m build";
+  throw new Error(
+    `Could not detect a ${kind} command. Set it in .hands/config.json scripts.${kind}`,
+  );
 }

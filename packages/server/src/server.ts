@@ -5,18 +5,19 @@ import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
 import staticPlugin from "@fastify/static";
-import type { EditerRuntime } from "@editer/core";
-import { PluginLoader, ToolRegistry, registerBuiltins } from "@editer/tools";
-import { registerAuth } from "./auth.js";
+import type { HandsRuntime } from "@hands/core";
+import { PluginLoader, ToolRegistry, registerBuiltins } from "@hands/tools";
+import { registerAuth, type AuthRuntimeState } from "./auth.js";
+import { rateLimitKeyFromRequest, isLoopbackIp } from "./authUtil.js";
+import { authStartupWarnings } from "@hands/core";
+import { loadGlobalConfig } from "@hands/core";
+import { runWithAuthContextAsync, defaultAuthContext } from "@hands/core";
+import { registerProtectedResourceMetadata } from "./oauth/prm.js";
+import { createEmbeddedOAuthProvider } from "./oauth/provider.js";
 import { registerControl } from "./control.js";
 import { createMcpServer, handleMcpHttp, type McpHttpSession } from "./mcp.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-
-function isLoopbackIp(ip: string | undefined): boolean {
-  if (!ip) return false;
-  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-}
 
 function findUiDist(): string | undefined {
   const candidates = [
@@ -29,14 +30,14 @@ function findUiDist(): string | undefined {
 }
 
 export interface StartedServer {
-  runtime: EditerRuntime;
+  runtime: HandsRuntime;
   registry: ToolRegistry;
   plugins: PluginLoader;
   close: () => Promise<void>;
   url: string;
 }
 
-export async function startServer(runtime: EditerRuntime): Promise<StartedServer> {
+export async function startServer(runtime: HandsRuntime): Promise<StartedServer> {
   const registry = new ToolRegistry();
   registerBuiltins(registry);
   const plugins = new PluginLoader(runtime, registry);
@@ -45,9 +46,7 @@ export async function startServer(runtime: EditerRuntime): Promise<StartedServer
 
   const httpLog = process.env.EDITER_HTTP_LOG === "1";
   const app = Fastify({
-    logger: httpLog
-      ? { level: process.env.EDITER_HTTP_LOG_LEVEL ?? "info" }
-      : false,
+    logger: httpLog ? { level: process.env.EDITER_HTTP_LOG_LEVEL ?? "info" } : false,
     trustProxy: true,
   });
 
@@ -55,24 +54,38 @@ export async function startServer(runtime: EditerRuntime): Promise<StartedServer
   await app.register(rateLimit, {
     max: runtime.merged().global.rateLimitMax,
     timeWindow: runtime.merged().global.rateLimitWindowMs,
-    keyGenerator: (req) => req.ip,
+    keyGenerator: (req) => rateLimitKeyFromRequest(req),
     allowList: (req) => isLoopbackIp(req.ip),
   });
 
   app.get("/healthz", async () => ({ ok: true, version: runtime.version() }));
 
-  app.addHook("preHandler", registerAuth(runtime));
+  const authState: AuthRuntimeState = {};
+  authState.embeddedOAuth = (await createEmbeddedOAuthProvider(runtime)) ?? undefined;
+  if (authState.embeddedOAuth) {
+    authState.embeddedOAuth.registerRoutes(app);
+  }
+  registerProtectedResourceMetadata(app, runtime);
+
+  for (const line of authStartupWarnings(loadGlobalConfig(runtime.paths))) {
+    console.warn(`[hands] ${line}`);
+  }
+
+  app.addHook("preHandler", registerAuth(runtime, authState));
 
   const sessions = new Map<string, McpHttpSession>();
 
   app.all("/mcp", async (req, reply) => {
+    const ctx = req.handsAuth ?? defaultAuthContext("none", "mcp");
     reply.hijack();
-    await handleMcpHttp(
-      () => createMcpServer(runtime, registry),
-      sessions,
-      req.raw,
-      reply.raw,
-      req.body,
+    await runWithAuthContextAsync(ctx, async () =>
+      handleMcpHttp(
+        () => createMcpServer(runtime, registry),
+        sessions,
+        req.raw,
+        reply.raw,
+        req.body,
+      ),
     );
   });
 

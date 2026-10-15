@@ -1,5 +1,5 @@
-import { EditerRuntime } from "@editer/core";
-import type { WorkspaceMode } from "@editer/shared";
+import { HandsRuntime } from "@hands/core";
+import type { WorkspaceMode } from "@hands/shared";
 
 export interface CommonOpts {
   home?: string;
@@ -11,8 +11,8 @@ export interface CommonOpts {
   url?: string;
 }
 
-export function runtimeFromOpts(opts: CommonOpts): EditerRuntime {
-  return new EditerRuntime({
+export function runtimeFromOpts(opts: CommonOpts): HandsRuntime {
+  return new HandsRuntime({
     home: opts.home,
     headless: opts.headless,
     host: opts.host,

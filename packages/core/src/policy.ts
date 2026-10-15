@@ -1,5 +1,5 @@
-import type { PolicyAction, ToolGroup, WorkspaceMode } from "@editer/shared";
-import { PolicyDeniedError } from "@editer/shared";
+import type { PolicyAction, ToolGroup, WorkspaceMode } from "@hands/shared";
+import { PolicyDeniedError } from "@hands/shared";
 
 export interface PolicyInput {
   mode: WorkspaceMode;
@@ -8,7 +8,10 @@ export interface PolicyInput {
   overrides?: Partial<Record<ToolGroup, PolicyAction>>;
 }
 
-export const MODE_POLICY_DEFAULTS: Record<WorkspaceMode, Record<"edit" | "exec" | "other", PolicyAction>> = {
+export const MODE_POLICY_DEFAULTS: Record<
+  WorkspaceMode,
+  Record<"edit" | "exec" | "other", PolicyAction>
+> = {
   readonly: { edit: "deny", exec: "deny", other: "allow" },
   review: { edit: "allow", exec: "approve", other: "allow" },
   auto: { edit: "allow", exec: "allow", other: "allow" },
@@ -16,12 +19,7 @@ export const MODE_POLICY_DEFAULTS: Record<WorkspaceMode, Record<"edit" | "exec" 
 
 function bucket(group: ToolGroup, mutating: boolean): "edit" | "exec" | "other" {
   if (!mutating) return "other";
-  if (
-    group === "exec" ||
-    group === "quality" ||
-    group === "highlevel" ||
-    group === "browser"
-  ) {
+  if (group === "exec" || group === "quality" || group === "highlevel" || group === "browser") {
     return "exec";
   }
   if (group === "edit" || group === "checkpoints" || group === "git") return "edit";

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { PolicyDeniedError } from "@editer/shared";
+import { PolicyDeniedError } from "@hands/shared";
 import { assertCommandAllowed } from "./commandPolicy.js";
 import { resolvePolicy } from "./policy.js";
-import type { ToolGroup, WorkspaceMode } from "@editer/shared";
+import type { ToolGroup, WorkspaceMode } from "@hands/shared";
 
 const groups: ToolGroup[] = ["edit", "exec", "read", "git"];
 const modes: WorkspaceMode[] = ["readonly", "review", "auto"];
@@ -37,9 +37,7 @@ describe("policy matrix", () => {
     expect(table["review:exec:mut"]).toBe("approve");
     expect(table["auto:edit:mut"]).toBe("allow");
     expect(table["auto:exec:mut"]).toBe("allow");
-    expect(
-      resolvePolicy({ mode: "review", group: "browser", mutating: true }),
-    ).toBe("approve");
+    expect(resolvePolicy({ mode: "review", group: "browser", mutating: true })).toBe("approve");
     expect(resolvePolicy({ mode: "auto", group: "browser", mutating: true })).toBe("allow");
     expect(resolvePolicy({ mode: "auto", group: "quality", mutating: true })).toBe("allow");
     expect(resolvePolicy({ mode: "review", group: "quality", mutating: true })).toBe("approve");

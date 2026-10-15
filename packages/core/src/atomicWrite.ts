@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DEFAULT_FILE_SIZE_LIMIT, EditError } from "@editer/shared";
+import { DEFAULT_FILE_SIZE_LIMIT, EditError } from "@hands/shared";
 import { applyLineInfo, detectLineInfo } from "./lineEnding.js";
 
 export function atomicWriteFile(
@@ -21,7 +21,10 @@ export function atomicWriteFile(
   }
   const dir = path.dirname(dest);
   fs.mkdirSync(dir, { recursive: true });
-  const tmp = path.join(os.tmpdir(), `.editer-write-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const tmp = path.join(
+    os.tmpdir(),
+    `.hands-write-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  );
   fs.writeFileSync(tmp, payload, "utf8");
   fs.renameSync(tmp, dest);
 }
@@ -39,7 +42,7 @@ export function atomicWriteBuffer(
   fs.mkdirSync(dir, { recursive: true });
   const tmp = path.join(
     os.tmpdir(),
-    `.editer-write-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    `.hands-write-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
   );
   fs.writeFileSync(tmp, contents);
   fs.renameSync(tmp, dest);

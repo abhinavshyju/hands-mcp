@@ -1,23 +1,25 @@
 {
-  "name": "@editer/cli",
+  "name": "@hands/cli",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "editer": "./dist/index.js"
+    "hands": "./dist/index.js"
   },
   "main": "./dist/index.js",
-  "files": ["dist"],
-  "description": "Local coding-agent MCP daemon (editer)",
+  "files": [
+    "dist"
+  ],
+  "description": "Local coding-agent MCP daemon (Hands)",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@editer/core": "workspace:*",
-    "@editer/server": "workspace:*",
-    "@editer/shared": "workspace:*",
-    "@editer/tools": "workspace:*",
+    "@hands/core": "workspace:*",
+    "@hands/server": "workspace:*",
+    "@hands/shared": "workspace:*",
+    "@hands/tools": "workspace:*",
     "commander": "^13.1.0"
   }
 }

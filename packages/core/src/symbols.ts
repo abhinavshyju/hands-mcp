@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import fg from "fast-glob";
+import { HANDS_DIRNAME, LEGACY_EDITER_DIRNAME } from "@hands/shared";
 import initSqlJs, { type Database } from "sql.js";
 
 const require = createRequire(import.meta.url);
@@ -14,7 +15,11 @@ export interface SymbolHit {
 }
 
 const EXTRACTORS: Array<{ glob: string; kind: string; re: RegExp }> = [
-  { glob: "*.{ts,tsx,js,jsx}", kind: "function", re: /(?:export\s+)?(?:async\s+)?function\s+(\w+)/g },
+  {
+    glob: "*.{ts,tsx,js,jsx}",
+    kind: "function",
+    re: /(?:export\s+)?(?:async\s+)?function\s+(\w+)/g,
+  },
   { glob: "*.{ts,tsx,js,jsx}", kind: "class", re: /(?:export\s+)?class\s+(\w+)/g },
   { glob: "*.{ts,tsx}", kind: "interface", re: /(?:export\s+)?interface\s+(\w+)/g },
   { glob: "*.{ts,tsx}", kind: "type", re: /(?:export\s+)?type\s+(\w+)\s*=/g },
@@ -25,7 +30,11 @@ const EXTRACTORS: Array<{ glob: string; kind: string; re: RegExp }> = [
   { glob: "*.rs", kind: "function", re: /(?:pub\s+)?(?:async\s+)?fn\s+(\w+)/g },
   { glob: "*.rs", kind: "struct", re: /(?:pub\s+)?struct\s+(\w+)/g },
   { glob: "*.java", kind: "class", re: /(?:public\s+)?(?:class|interface|enum)\s+(\w+)/g },
-  { glob: "*.java", kind: "method", re: /(?:public|private|protected)\s+(?:static\s+)?[\w<>[\]]+\s+(\w+)\s*\(/g },
+  {
+    glob: "*.java",
+    kind: "method",
+    re: /(?:public|private|protected)\s+(?:static\s+)?[\w<>[\]]+\s+(\w+)\s*\(/g,
+  },
 ];
 
 function lineOf(text: string, index: number): number {
@@ -85,7 +94,12 @@ export class SymbolIndex {
       ? [onlyFile]
       : fg.sync(["**/*.{ts,tsx,js,jsx,py,go,rs,java}"], {
           cwd,
-          ignore: ["**/node_modules/**", "**/.git/**", "**/.editer/**"],
+          ignore: [
+            "**/node_modules/**",
+            "**/.git/**",
+            `**/${HANDS_DIRNAME}/**`,
+            `**/${LEGACY_EDITER_DIRNAME}/**`,
+          ],
           onlyFiles: true,
         });
     const t0 = Date.now();

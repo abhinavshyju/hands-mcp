@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { atomicWriteBuffer, samplingImageSource } from "@editer/core";
+import { atomicWriteBuffer, samplingImageSource } from "@hands/core";
 import { defineTool } from "./types.js";
 import { mediaFromBuffer, withMedia } from "./media.js";
 
@@ -12,7 +12,7 @@ export const imageTools = [
     mutating: true,
     schema: z.object({
       prompt: z.string().min(1),
-      path: z.string().default(".editer/media/generated.png"),
+      path: z.string().default(".hands/media/generated.png"),
     }),
     handler: async (ctx, args) => {
       const source = samplingImageSource(ctx.sampling);

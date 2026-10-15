@@ -39,7 +39,7 @@ export const workspaceRecordSchema = z.object({
 });
 export type WorkspaceRecord = z.infer<typeof workspaceRecordSchema>;
 
-export const tunnelModeSchema = z.enum(["off", "quick", "token", "named"]);
+export const tunnelModeSchema = z.enum(["off", "quick", "token", "named", "ngrok"]);
 export type TunnelMode = z.infer<typeof tunnelModeSchema>;
 
 export const tunnelConfigSchema = z.object({
@@ -50,20 +50,49 @@ export const tunnelConfigSchema = z.object({
   credentialsFile: z.string().optional(),
   configFile: z.string().optional(),
   token: z.string().optional(),
+  ngrokAuthtoken: z.string().optional(),
   quickUrl: z.string().optional(),
 });
 export type TunnelConfig = z.infer<typeof tunnelConfigSchema>;
 
+export const authModeSchema = z.enum(["none", "bearer", "oauth"]);
+export type AuthMode = z.infer<typeof authModeSchema>;
+
+export const authMethodSchema = z.enum(["none", "bearer", "oauth", "loopback"]);
+export type AuthMethod = z.infer<typeof authMethodSchema>;
+
+export const oauthConfigSchema = z.object({
+  scopes: z.array(z.string()).default(["mcp"]),
+  publicBaseUrl: z.string().url().optional(),
+  externalIssuer: z.string().url().optional(),
+  allowDcr: z.boolean().default(true),
+});
+export type OAuthConfig = z.infer<typeof oauthConfigSchema>;
+
+export const authConfigSchema = z.object({
+  mode: authModeSchema.default("none"),
+  oauth: oauthConfigSchema.default({}),
+  loopbackBypass: z.boolean().default(true),
+});
+export type AuthConfig = z.infer<typeof authConfigSchema>;
+
+export const authContextSchema = z.object({
+  method: authMethodSchema,
+  clientId: z.string().optional(),
+  clientName: z.string(),
+  subject: z.string().optional(),
+});
+export type AuthContext = z.infer<typeof authContextSchema>;
+
 export const modeSourceSchema = z.enum(["override", "project", "workspace", "default"]);
 export type ModeSource = z.infer<typeof modeSourceSchema>;
 
-export const toolGroupOverridesSchema = z
-  .record(toolGroupSchema, policyActionSchema)
-  .default({});
+export const toolGroupOverridesSchema = z.record(toolGroupSchema, policyActionSchema).default({});
 
 export const globalConfigSchema = z.object({
   host: z.string().default("127.0.0.1"),
   port: z.number().int().positive().default(4877),
+  auth: authConfigSchema.default({}),
   tokens: z.array(clientTokenSchema).default([]),
   tunnel: tunnelConfigSchema.default({ enabled: false }),
   pluginDir: z.string().optional(),
@@ -90,6 +119,7 @@ export const projectConfigSchema = z.object({
   toolGroupOverrides: toolGroupOverridesSchema,
   allowlistCommands: z.array(z.string()).optional(),
   allowedBrowserHosts: z.array(z.string()).default([]),
+  formatOnEdit: z.boolean().default(true),
 });
 export type ProjectConfig = z.infer<typeof projectConfigSchema>;
 

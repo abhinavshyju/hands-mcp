@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { PathJailError } from "@editer/shared";
+import { PathJailError } from "@hands/shared";
 import { resolvePath } from "./jail.js";
 
 function tmpWorkspace(): string {
@@ -18,15 +18,13 @@ describe("path jail", () => {
     expect(abs).toBe(fs.realpathSync(path.join(root, "ok.txt")));
   });
 
-  it.each([
-    "../etc/passwd",
-    "../../secret",
-    "foo/../../ok.txt/../../../etc/passwd",
-    "/etc/passwd",
-  ])("rejects traversal %s", (input) => {
-    const root = tmpWorkspace();
-    expect(() => resolvePath({ workspaceRoot: root, input, op: "read" })).toThrow(PathJailError);
-  });
+  it.each(["../etc/passwd", "../../secret", "foo/../../ok.txt/../../../etc/passwd", "/etc/passwd"])(
+    "rejects traversal %s",
+    (input) => {
+      const root = tmpWorkspace();
+      expect(() => resolvePath({ workspaceRoot: root, input, op: "read" })).toThrow(PathJailError);
+    },
+  );
 
   it("rejects symlink that escapes the workspace", () => {
     const root = tmpWorkspace();

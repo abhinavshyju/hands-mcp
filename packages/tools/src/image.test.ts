@@ -2,8 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { EditerError } from "@editer/shared";
-import { EditerRuntime } from "@editer/core";
+import { HandsError } from "@hands/shared";
+import { HandsRuntime } from "@hands/core";
 import { imageTools } from "./image.js";
 import { ToolRegistry } from "./registry.js";
 
@@ -13,7 +13,7 @@ const PNG =
 function setup() {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "editer-img-home-"));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "editer-img-ws-"));
-  const runtime = new EditerRuntime({ home, noTunnel: true });
+  const runtime = new HandsRuntime({ home, noTunnel: true });
   const ws = runtime.workspaces.add(root, "t");
   runtime.workspaces.setMode(ws.id, "auto");
   const registry = new ToolRegistry();
@@ -46,6 +46,6 @@ describe("generate_image", () => {
     const { runtime, registry } = setup();
     await expect(
       registry.invoke("generate_image", { runtime }, { prompt: "x", path: "x.png" }),
-    ).rejects.toMatchObject({ code: "SAMPLING_UNAVAILABLE" } as Partial<EditerError>);
+    ).rejects.toMatchObject({ code: "SAMPLING_UNAVAILABLE" } as Partial<HandsError>);
   });
 });

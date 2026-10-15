@@ -1,11 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { DEFAULT_READ_BYTES } from "@editer/shared";
-import { loadGitignore } from "@editer/core";
+import { DEFAULT_READ_BYTES } from "@hands/shared";
+import { loadGitignore } from "@hands/core";
 import { defineTool } from "./types.js";
 
-function readCapped(abs: string, startLine?: number, endLine?: number): { content: string; truncated: boolean; binary: boolean } {
+function readCapped(
+  abs: string,
+  startLine?: number,
+  endLine?: number,
+): { content: string; truncated: boolean; binary: boolean } {
   const buf = fs.readFileSync(abs);
   if (buf.includes(0)) return { content: "", truncated: false, binary: true };
   let text = buf.toString("utf8");

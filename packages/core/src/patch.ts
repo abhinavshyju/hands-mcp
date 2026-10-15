@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { EditError } from "@editer/shared";
+import { EditError } from "@hands/shared";
 import { atomicWriteFile } from "./atomicWrite.js";
+import { type EditOptions } from "./editFormat.js";
+import { formatSourceFile, isFormattableSourcePath } from "./formatSource.js";
 
 interface Hunk {
   oldStart: number;
@@ -107,14 +109,26 @@ function applyHunks(original: string, hunks: Hunk[], fileLabel: string): string 
   return out.join("\n");
 }
 
-export function applyPatchToFiles(
+export async function applyPatchToFiles(
   workspaceRoot: string,
   patch: string,
   resolve: (rel: string) => string,
-): { files: string[]; diffs: Record<string, { before: string; after: string }> } {
+  options: EditOptions = {},
+): Promise<{
+  files: string[];
+  diffs: Record<string, { before: string; after: string }>;
+  formattedFiles?: string[];
+  formatWarnings?: Record<string, string>;
+}> {
   const parsed = parseUnifiedDiff(patch);
-  const planned: Array<{ abs: string; rel: string; before: string; after: string; isNew: boolean; isDelete: boolean }> =
-    [];
+  const planned: Array<{
+    abs: string;
+    rel: string;
+    before: string;
+    after: string;
+    isNew: boolean;
+    isDelete: boolean;
+  }> = [];
   for (const file of parsed) {
     const rel = file.newFile === "/dev/null" ? file.oldFile : file.newFile;
     const abs = resolve(rel);
@@ -142,6 +156,26 @@ export function applyPatchToFiles(
   }
 
   const diffs: Record<string, { before: string; after: string }> = {};
-  for (const p of planned) diffs[path.relative(workspaceRoot, p.abs)] = { before: p.before, after: p.after };
-  return { files: planned.map((p) => p.rel), diffs };
+  const formattedFiles: string[] = [];
+  const formatWarnings: Record<string, string> = {};
+  const formatOnEdit = options.formatOnEdit !== false;
+
+  for (const p of planned) {
+    const rel = path.relative(workspaceRoot, p.abs);
+    let after = p.isDelete ? "" : fs.existsSync(p.abs) ? fs.readFileSync(p.abs, "utf8") : p.after;
+    if (!p.isDelete && formatOnEdit && isFormattableSourcePath(p.abs)) {
+      const fmt = await formatSourceFile(p.abs);
+      after = fs.readFileSync(p.abs, "utf8");
+      if (fmt.warning) formatWarnings[rel] = fmt.warning;
+      else if (fmt.formatted && fmt.changed) formattedFiles.push(rel);
+    }
+    diffs[rel] = { before: p.before, after };
+  }
+
+  return {
+    files: planned.map((p) => p.rel),
+    diffs,
+    ...(formattedFiles.length > 0 ? { formattedFiles } : {}),
+    ...(Object.keys(formatWarnings).length > 0 ? { formatWarnings } : {}),
+  };
 }

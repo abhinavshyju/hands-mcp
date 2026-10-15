@@ -1,6 +1,7 @@
 import type { Command } from "commander";
-import { buildMcpConnect, type McpConnectClient } from "@editer/core";
+import { buildMcpConnect, type McpConnectClient } from "@hands/core";
 import { runtimeFromOpts } from "../runtime-opts.js";
+import { info, writeErr, writeln } from "../ui/render.js";
 
 export function registerConnect(program: Command): void {
   program
@@ -14,13 +15,13 @@ export function registerConnect(program: Command): void {
       try {
         const out = buildMcpConnect(rt, client);
         if (client === "claude") {
-          console.log("Paste into Claude Desktop mcp config:\n");
+          info("Paste into Claude Desktop mcp config:\n");
         } else if (client === "cursor") {
-          console.log("Cursor MCP config:\n");
+          info("Cursor MCP config:\n");
         }
-        console.log(out.pasteText);
+        writeln(out.pasteText);
       } catch (err) {
-        console.error(err instanceof Error ? err.message : String(err));
+        writeErr(err instanceof Error ? err.message : String(err));
         process.exit(1);
       }
     });
@@ -32,8 +33,8 @@ export function registerConnect(program: Command): void {
     .option("--mode <mode>")
     .action(async (opts: { home?: string; mode?: string }) => {
       const rt = runtimeFromOpts(opts);
-      const { serveStdio } = await import("@editer/server");
-      const { ToolRegistry, registerBuiltins } = await import("@editer/tools");
+      const { serveStdio } = await import("@hands/server");
+      const { ToolRegistry, registerBuiltins } = await import("@hands/tools");
       const registry = new ToolRegistry();
       registerBuiltins(registry);
       await serveStdio(rt, registry);

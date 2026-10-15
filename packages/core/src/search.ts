@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import fg from "fast-glob";
 import ignore from "ignore";
-import { DEFAULT_GREP_MATCH_CAP } from "@editer/shared";
+import { DEFAULT_GREP_MATCH_CAP, HANDS_DIRNAME, LEGACY_EDITER_DIRNAME } from "@hands/shared";
 
 function findRg(): string {
   const which = spawnSync("which", ["rg"], { encoding: "utf8" });
@@ -33,7 +33,11 @@ export function grepSearch(opts: {
   if (opts.globExclude) args.push("--glob", `!${opts.globExclude}`);
   if (opts.context) args.push("-C", String(opts.context));
   args.push("--", opts.pattern, ".");
-  const res = spawnSync(findRg(), args, { cwd: opts.cwd, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+  const res = spawnSync(findRg(), args, {
+    cwd: opts.cwd,
+    encoding: "utf8",
+    maxBuffer: 8 * 1024 * 1024,
+  });
   if (res.error || (res.status !== 0 && res.status !== 1)) {
     return fallbackGrep(opts, max);
   }
@@ -60,12 +64,23 @@ export function grepSearch(opts: {
 }
 
 function fallbackGrep(
-  opts: { cwd: string; pattern: string; glob?: string; caseInsensitive?: boolean; maxMatches?: number },
+  opts: {
+    cwd: string;
+    pattern: string;
+    glob?: string;
+    caseInsensitive?: boolean;
+    maxMatches?: number;
+  },
   max: number,
 ): { hits: GrepHit[]; truncated: boolean } {
   const files = fg.sync(opts.glob ?? "**/*", {
     cwd: opts.cwd,
-    ignore: ["**/node_modules/**", "**/.git/**", "**/.editer/**"],
+    ignore: [
+      "**/node_modules/**",
+      "**/.git/**",
+      `**/${HANDS_DIRNAME}/**`,
+      `**/${LEGACY_EDITER_DIRNAME}/**`,
+    ],
     onlyFiles: true,
     absolute: false,
   });
@@ -94,18 +109,20 @@ function fallbackGrep(
 }
 
 export function globSearch(cwd: string, pattern: string, max = 500): string[] {
-  return fg.sync(pattern, {
-    cwd,
-    ignore: ["**/node_modules/**", "**/.git/**"],
-    onlyFiles: true,
-    absolute: false,
-  }).slice(0, max);
+  return fg
+    .sync(pattern, {
+      cwd,
+      ignore: ["**/node_modules/**", "**/.git/**"],
+      onlyFiles: true,
+      absolute: false,
+    })
+    .slice(0, max);
 }
 
 export function loadGitignore(cwd: string): (p: string) => boolean {
   const ig = ignore();
   const gi = path.join(cwd, ".gitignore");
   if (fs.existsSync(gi)) ig.add(fs.readFileSync(gi, "utf8"));
-  ig.add([".git", "node_modules", ".editer"]);
+  ig.add([".git", "node_modules", HANDS_DIRNAME, LEGACY_EDITER_DIRNAME]);
   return (p: string) => ig.ignores(p);
 }

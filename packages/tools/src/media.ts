@@ -1,4 +1,4 @@
-import { DEFAULT_INLINE_MEDIA_BYTES } from "@editer/shared";
+import { DEFAULT_INLINE_MEDIA_BYTES } from "@hands/shared";
 
 export interface MediaItem {
   mimeType: string;

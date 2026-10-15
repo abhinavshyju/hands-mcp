@@ -1,5 +1,5 @@
 {
-  "name": "editer-mcp",
+  "name": "hands-mcp",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.19.0",
@@ -7,12 +7,15 @@
     "node": ">=20"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "@eslint/js": "^9.25.1",
     "@types/node": "^22.14.1",
     "eslint": "^9.25.1",
+    "eslint-config-prettier": "^10.1.5",
     "globals": "^16.0.0",
     "prettier": "^3.5.3",
     "typescript": "^5.8.3",
@@ -20,16 +23,18 @@
     "vitest": "^3.1.2"
   },
   "scripts": {
-    "build": "pnpm -r --filter './packages/*' build && pnpm --filter @editer/ui build && node scripts/sync-ui.mjs",
-    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "build": "pnpm -r --filter './packages/*' build && pnpm --filter @hands/ui build && node scripts/sync-ui.mjs",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "pnpm -r --filter './packages/*' typecheck && pnpm --filter @editer/ui typecheck",
+    "typecheck": "pnpm -r --filter './packages/*' typecheck && pnpm --filter @hands/ui typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",
-    "editer": "pnpm --filter @editer/cli start",
+    "format:check": "prettier --check .",
+    "hands": "pnpm --filter @hands/cli start",
+    "build:global": "node scripts/install-global.mjs",
     "install:global": "node scripts/install-global.mjs",
-    "editer:bin": "node packages/cli/dist/index.js"
+    "hands:bin": "node packages/cli/dist/index.js"
   }
 }

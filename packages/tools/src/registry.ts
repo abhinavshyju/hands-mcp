@@ -1,10 +1,6 @@
 import { z, type ZodType } from "zod";
-import {
-  ApprovalDeniedError,
-  EditerError,
-  type ToolGroup,
-} from "@editer/shared";
-import { assertAllowed, snapshotFiles, resolvePolicy } from "@editer/core";
+import { ApprovalDeniedError, HandsError, type ToolGroup } from "@hands/shared";
+import { assertAllowed, snapshotFiles, resolvePolicy } from "@hands/core";
 import { stripMediaForAudit } from "./media.js";
 import type { ToolContext, ToolDefinition } from "./types.js";
 
@@ -41,7 +37,7 @@ export class ToolRegistry {
 
   async invoke(name: string, ctx: ToolContext, rawArgs: unknown): Promise<unknown> {
     const tool = this.tools.get(name);
-    if (!tool) throw new EditerError("UNKNOWN_TOOL", `Unknown tool: ${name}`);
+    if (!tool) throw new HandsError("UNKNOWN_TOOL", `Unknown tool: ${name}`);
     const args = tool.schema.parse(rawArgs ?? {});
     const merged = ctx.runtime.merged();
     const ws = ctx.runtime.workspace();
@@ -77,7 +73,10 @@ export class ToolRegistry {
         group: tool.group,
         summary: `${tool.name} ${summarize(args)}`,
         preview: JSON.stringify(args, null, 2).slice(0, 4000),
-        command: typeof (args as { command?: string }).command === "string" ? (args as { command: string }).command : undefined,
+        command:
+          typeof (args as { command?: string }).command === "string"
+            ? (args as { command: string }).command
+            : undefined,
         clientId: ctx.clientId,
         clientName: ctx.clientName,
         workspaceId: ws.id,
@@ -116,8 +115,8 @@ export class ToolRegistry {
         durationMs: Date.now() - started,
         checkpointId,
       });
-      if (err instanceof ApprovalDeniedError || err instanceof EditerError) throw err;
-      throw new EditerError("TOOL_ERROR", message);
+      if (err instanceof ApprovalDeniedError || err instanceof HandsError) throw err;
+      throw new HandsError("TOOL_ERROR", message);
     }
   }
 }

@@ -1,27 +1,42 @@
 import type { FastifyInstance } from "fastify";
 import {
+  authStartupWarnings,
   buildMcpConnect,
+  buildOAuthDiscoveryUrls,
   diffCheckpoint,
   listCheckpoints,
   loadGlobalConfig,
   loadProjectConfig,
   redactGlobalConfigForApi,
+  redactedTunnelConfigView,
   restoreCheckpoint,
   saveGlobalConfig,
   saveProjectConfig,
   setModeScoped,
+  tunnelCreateNamed,
+  tunnelInstallBinary,
+  tunnelListText,
+  tunnelLogin,
+  tunnelRouteDns,
+  tunnelSetupNamed,
   type McpConnectClient,
-} from "@editer/core";
-import type { EditerRuntime } from "@editer/core";
-import type { ToolRegistry } from "@editer/tools";
-import type { PluginLoader } from "@editer/tools";
+} from "@hands/core";
+import type { HandsRuntime } from "@hands/core";
+import type { ToolRegistry } from "@hands/tools";
+import type { PluginLoader } from "@hands/tools";
 import fs from "node:fs";
-import { unifiedDiff } from "@editer/core";
-import { globalConfigSchema, projectConfigSchema, type TunnelMode, type WorkspaceMode } from "@editer/shared";
+import { unifiedDiff } from "@hands/core";
+import {
+  authModeSchema,
+  globalConfigSchema,
+  projectConfigSchema,
+  type TunnelMode,
+  type WorkspaceMode,
+} from "@hands/shared";
 
 export function registerControl(
   app: FastifyInstance,
-  runtime: EditerRuntime,
+  runtime: HandsRuntime,
   registry: ToolRegistry,
   plugins: PluginLoader,
 ): void {
@@ -63,11 +78,18 @@ export function registerControl(
     return runtime.workspaces.setMode(id, body.mode);
   });
   app.post("/api/mode", async (req) => {
-    const body = req.body as { mode: WorkspaceMode; scope?: "workspace" | "project"; workspaceId?: string };
+    const body = req.body as {
+      mode: WorkspaceMode;
+      scope?: "workspace" | "project";
+      workspaceId?: string;
+    };
     const scope = body.scope ?? "workspace";
     let ws = runtime.workspaces.getActive();
     if (body.workspaceId) {
-      ws = runtime.workspaces.list().find((w) => w.id === body.workspaceId || w.name === body.workspaceId) ?? ws;
+      ws =
+        runtime.workspaces
+          .list()
+          .find((w) => w.id === body.workspaceId || w.name === body.workspaceId) ?? ws;
     }
     if (!ws) throw new Error("No workspace registered");
     if (scope === "project") {
@@ -87,15 +109,69 @@ export function registerControl(
 
   app.get("/api/config", async () => runtime.merged());
 
-  app.get("/api/config/global", async () => redactGlobalConfigForApi(loadGlobalConfig(runtime.paths)));
+  app.get("/api/config/global", async () =>
+    redactGlobalConfigForApi(loadGlobalConfig(runtime.paths)),
+  );
 
   app.post("/api/config/global", async (req) => {
     const body = req.body as Record<string, unknown>;
     const cfg = loadGlobalConfig(runtime.paths);
-    const merged = { ...cfg, ...body };
+    const authPatch = body.auth as Record<string, unknown> | undefined;
+    const merged = {
+      ...cfg,
+      ...body,
+      auth: authPatch
+        ? {
+            ...cfg.auth,
+            ...authPatch,
+            oauth: {
+              ...cfg.auth.oauth,
+              ...(authPatch.oauth as Record<string, unknown> | undefined),
+            },
+          }
+        : cfg.auth,
+    };
     const parsed = globalConfigSchema.parse(merged);
     saveGlobalConfig(runtime.paths, parsed);
     return redactGlobalConfigForApi(parsed);
+  });
+
+  app.post("/api/auth/mode", async (req) => {
+    const body = req.body as { mode?: string };
+    const mode = authModeSchema.parse(body.mode);
+    const cfg = loadGlobalConfig(runtime.paths);
+    const merged = { ...cfg, auth: { ...cfg.auth, mode } };
+    const parsed = globalConfigSchema.parse(merged);
+    saveGlobalConfig(runtime.paths, parsed);
+    const warnings = authStartupWarnings(parsed);
+    return { auth: parsed.auth, warnings };
+  });
+
+  app.get("/api/auth/oauth-urls", async (_req, reply) => {
+    const cfg = loadGlobalConfig(runtime.paths);
+    const urls = buildOAuthDiscoveryUrls(cfg);
+    if (!urls) {
+      return reply.code(400).send({
+        error: "No public base URL. Set auth.oauth.publicBaseUrl or configure a tunnel hostname.",
+      });
+    }
+    return urls;
+  });
+
+  app.post("/api/tokens", async (req, reply) => {
+    const body = req.body as { name?: string };
+    const name = body.name?.trim();
+    if (!name) {
+      return reply.code(400).send({ error: "name is required" });
+    }
+    const t = runtime.tokens.create(name);
+    return { id: t.id, name: t.name, token: t.token, createdAt: t.createdAt };
+  });
+
+  app.delete("/api/tokens/:id", async (req) => {
+    const id = (req.params as { id: string }).id;
+    runtime.tokens.revoke(id);
+    return { ok: true, id };
   });
 
   app.post("/api/config/tunnel", async (req) => {
@@ -104,6 +180,7 @@ export function registerControl(
       mode?: TunnelMode;
       hostname?: string;
       token?: string;
+      ngrokAuthtoken?: string;
       exposeUiOverTunnel?: boolean;
     };
     const patch: Parameters<typeof runtime.tunnel.applyConfig>[0] = {};
@@ -113,7 +190,11 @@ export function registerControl(
       patch.enabled = body.mode !== "off";
     }
     if (body.hostname !== undefined) patch.hostname = body.hostname.trim() || undefined;
+    const bodyExt = body as { tunnelName?: string };
+    if (bodyExt.tunnelName !== undefined) patch.tunnelName = bodyExt.tunnelName.trim() || undefined;
     if (body.token !== undefined) patch.token = body.token.trim() || undefined;
+    if (body.ngrokAuthtoken !== undefined)
+      patch.ngrokAuthtoken = body.ngrokAuthtoken.trim() || undefined;
     if (body.exposeUiOverTunnel !== undefined) patch.exposeUiOverTunnel = body.exposeUiOverTunnel;
     await runtime.tunnel.applyConfig(patch);
     if (!runtime.noTunnel) {
@@ -153,6 +234,44 @@ export function registerControl(
     const ok = await runtime.tunnel.verifyPublicHealth(host);
     return { ok };
   });
+
+  app.post("/api/tunnel/install", async () => tunnelInstallBinary(runtime));
+
+  app.post("/api/tunnel/login", async () => tunnelLogin(runtime));
+
+  app.post("/api/tunnel/create", async (req) => {
+    const body = (req.body as { name?: string }) ?? {};
+    return tunnelCreateNamed(runtime, body.name);
+  });
+
+  app.get("/api/tunnel/list", async () => {
+    const text = await tunnelListText(runtime);
+    return { text };
+  });
+
+  app.post("/api/tunnel/route-dns", async (req) => {
+    const body = req.body as { hostname?: string; name?: string };
+    if (!body.hostname?.trim()) {
+      throw new Error("hostname is required");
+    }
+    await tunnelRouteDns(runtime, body.hostname, body.name);
+    return { ok: true, hostname: body.hostname.trim() };
+  });
+
+  app.post("/api/tunnel/setup", async (req) => {
+    const body = req.body as { hostname?: string; name?: string; skipLogin?: boolean };
+    const out = await tunnelSetupNamed(runtime, {
+      hostname: body.hostname ?? "",
+      name: body.name,
+      skipLogin: body.skipLogin,
+    });
+    if (!runtime.noTunnel) {
+      await runtime.tunnel.restart();
+    }
+    return { ...out, tunnel: runtime.tunnel.getState() };
+  });
+
+  app.get("/api/tunnel/config", async () => redactedTunnelConfigView(runtime.paths));
 
   app.get("/api/mcp/connect", async (req, reply) => {
     const q = req.query as { client?: string };
@@ -219,10 +338,15 @@ export function registerControl(
   );
 
   app.get("/api/audit", async (req) => {
-    const q = req.query as { limit?: string; tool?: string };
+    const q = req.query as { limit?: string; tool?: string; workspaceId?: string; all?: string };
+    const allWorkspaces = q.all === "1" || q.all === "true" || q.workspaceId === "all";
+    const workspaceId = allWorkspaces
+      ? undefined
+      : (q.workspaceId ?? runtime.workspaces.getActive()?.id);
     return runtime.audit.query({
       limit: q.limit ? Number(q.limit) : 200,
       tool: q.tool,
+      workspaceId,
     });
   });
 

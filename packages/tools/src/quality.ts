@@ -6,7 +6,7 @@ import {
   resolveScript,
   runCommand,
   scaffoldProject,
-} from "@editer/core";
+} from "@hands/core";
 import { defineTool } from "./types.js";
 
 function parseSummary(output: string): { passed?: number; failed?: number; excerpt: string } {
@@ -62,7 +62,10 @@ export const qualityTools = [
       else if (pm === "pip") cmd = pkg ? `pip install ${pkg}` : "pip install -e .";
       else cmd = pkg ? `npm install ${args.dev ? "-D " : ""}${pkg}` : "npm install";
       assertCommandAllowed(cmd);
-      return { command: cmd, ...(await runCommand({ command: cmd, cwd: root, timeoutMs: 180_000 })) };
+      return {
+        command: cmd,
+        ...(await runCommand({ command: cmd, cwd: root, timeoutMs: 180_000 })),
+      };
     },
   }),
   defineTool({

@@ -10,9 +10,9 @@ import type {
   TunnelMode,
   WorkspaceMode,
   WorkspaceRecord,
-} from "@editer/shared";
+} from "@hands/shared";
 import { loadGlobalConfig } from "./config.js";
-import type { EditerPaths } from "./paths.js";
+import type { HandsPaths } from "./paths.js";
 
 export interface DaemonStateResponse {
   version: string;
@@ -50,10 +50,10 @@ export interface ApprovalResponse {
 export class DaemonClient {
   constructor(
     readonly baseUrl: string,
-    readonly paths: EditerPaths,
+    readonly paths: HandsPaths,
   ) {}
 
-  static fromPaths(paths: EditerPaths, urlOverride?: string): DaemonClient {
+  static fromPaths(paths: HandsPaths, urlOverride?: string): DaemonClient {
     const cfg = loadGlobalConfig(paths);
     const base = urlOverride ?? `http://${cfg.host}:${cfg.port}`;
     return new DaemonClient(base.replace(/\/$/, ""), paths);
@@ -88,10 +88,14 @@ export class DaemonClient {
     return this.fetchJson("/api/approvals");
   }
 
-  audit(opts: { limit?: number; tool?: string } = {}): Promise<AuditEvent[]> {
+  audit(
+    opts: { limit?: number; tool?: string; workspaceId?: string; all?: boolean } = {},
+  ): Promise<AuditEvent[]> {
     const q = new URLSearchParams();
     if (opts.limit !== undefined) q.set("limit", String(opts.limit));
     if (opts.tool) q.set("tool", opts.tool);
+    if (opts.all) q.set("all", "1");
+    else if (opts.workspaceId) q.set("workspaceId", opts.workspaceId);
     const qs = q.toString();
     return this.fetchJson(`/api/audit${qs ? `?${qs}` : ""}`);
   }
@@ -110,7 +114,11 @@ export class DaemonClient {
     });
   }
 
-  setMode(mode: WorkspaceMode, scope: "workspace" | "project" = "workspace", workspaceId?: string): Promise<unknown> {
+  setMode(
+    mode: WorkspaceMode,
+    scope: "workspace" | "project" = "workspace",
+    workspaceId?: string,
+  ): Promise<unknown> {
     return this.fetchJson("/api/mode", {
       method: "POST",
       body: JSON.stringify({ mode, scope, workspaceId }),
@@ -161,6 +169,32 @@ export class DaemonClient {
     });
   }
 
+  setAuthMode(mode: "none" | "bearer" | "oauth"): Promise<{ auth: unknown; warnings: string[] }> {
+    return this.fetchJson("/api/auth/mode", {
+      method: "POST",
+      body: JSON.stringify({ mode }),
+    });
+  }
+
+  oauthUrls(): Promise<{
+    publicBaseUrl: string;
+    mcpResource: string;
+    protectedResourceMetadata: string;
+    authorizationServer: string;
+    externalIssuer: boolean;
+  }> {
+    return this.fetchJson("/api/auth/oauth-urls");
+  }
+
+  createToken(
+    name: string,
+  ): Promise<{ id: string; name: string; token: string; createdAt: number }> {
+    return this.fetchJson("/api/tokens", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  }
+
   setProjectConfig(patch: Record<string, unknown>): Promise<MergedConfig> {
     return this.fetchJson("/api/config/project", {
       method: "POST",
@@ -173,6 +207,7 @@ export class DaemonClient {
     enabled?: boolean;
     hostname?: string;
     token?: string;
+    ngrokAuthtoken?: string;
     exposeUiOverTunnel?: boolean;
   }): Promise<unknown> {
     return this.fetchJson("/api/config/tunnel", {
@@ -214,11 +249,14 @@ export interface EnsureDaemonOptions {
   mode?: WorkspaceMode;
 }
 
-export async function ensureDaemon(paths: EditerPaths, opts: EnsureDaemonOptions): Promise<DaemonClient> {
+export async function ensureDaemon(
+  paths: HandsPaths,
+  opts: EnsureDaemonOptions,
+): Promise<DaemonClient> {
   const client = DaemonClient.fromPaths(paths);
   if (await client.isRunning()) return client;
 
-  const editerBin = process.argv[1] ? path.resolve(process.argv[1]) : "editer";
+  const handsBin = process.argv[1] ? path.resolve(process.argv[1]) : "hands";
   const args = [
     "start",
     "--headless",
@@ -230,7 +268,7 @@ export async function ensureDaemon(paths: EditerPaths, opts: EnsureDaemonOptions
   if (opts.noTunnel) args.push("--no-tunnel");
   if (opts.mode) args.push("--mode", opts.mode);
 
-  const child = spawn(process.execPath, [editerBin, ...args], {
+  const child = spawn(process.execPath, [handsBin, ...args], {
     detached: true,
     stdio: "ignore",
     env: {
@@ -251,7 +289,7 @@ export async function ensureDaemon(paths: EditerPaths, opts: EnsureDaemonOptions
     }
     await sleep(200);
   }
-  throw new Error("Timed out waiting for editer daemon to start");
+  throw new Error("Timed out waiting for hands daemon to start");
 }
 
 function sleep(ms: number): Promise<void> {

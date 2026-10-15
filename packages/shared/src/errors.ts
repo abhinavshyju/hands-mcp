@@ -1,42 +1,42 @@
-export class EditerError extends Error {
+export class HandsError extends Error {
   readonly code: string;
 
   constructor(code: string, message: string) {
     super(message);
-    this.name = "EditerError";
+    this.name = "HandsError";
     this.code = code;
   }
 }
 
-export class PathJailError extends EditerError {
+export class PathJailError extends HandsError {
   constructor(message: string) {
     super("PATH_JAIL", message);
     this.name = "PathJailError";
   }
 }
 
-export class ApprovalDeniedError extends EditerError {
+export class ApprovalDeniedError extends HandsError {
   constructor(message: string) {
     super("APPROVAL_DENIED", message);
     this.name = "ApprovalDeniedError";
   }
 }
 
-export class PolicyDeniedError extends EditerError {
+export class PolicyDeniedError extends HandsError {
   constructor(message: string) {
     super("POLICY_DENIED", message);
     this.name = "PolicyDeniedError";
   }
 }
 
-export class EditError extends EditerError {
+export class EditError extends HandsError {
   constructor(message: string) {
     super("EDIT_FAILED", message);
     this.name = "EditError";
   }
 }
 
-export class AuthError extends EditerError {
+export class AuthError extends HandsError {
   constructor(message: string) {
     super("AUTH", message);
     this.name = "AuthError";

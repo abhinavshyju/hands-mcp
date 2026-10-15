@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { grepSearch, globSearch } from "@editer/core";
+import { grepSearch, globSearch } from "@hands/core";
 import { defineTool } from "./types.js";
 
 export const searchTools = [

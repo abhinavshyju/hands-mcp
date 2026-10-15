@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+coverage
+.turbo
+*.tsbuildinfo
+pnpm-lock.yaml
+packages/server/ui
+apps/ui/dist
+packages/*/dist
+.deploy

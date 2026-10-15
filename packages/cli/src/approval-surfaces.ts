@@ -1,18 +1,34 @@
 import readline from "node:readline/promises";
-import type { EditerRuntime } from "@editer/core";
+import type { HandsRuntime } from "@hands/core";
+import { printBox, writeln } from "./ui/render.js";
+import { styles } from "./ui/theme.js";
 
 function approvalHint(req: { id: string; summary: string }): void {
-  console.log(`\n[approval] ${req.summary}`);
-  console.log(`  id=${req.id}`);
-  console.log(`  editer approvals approve ${req.id.slice(0, 8)}…  |  editer review\n`);
+  writeln("");
+  printBox("approval", [
+    req.summary,
+    styles.dim(`id=${req.id}`),
+    hintMessage("hands approvals approve …  |  hands review"),
+  ]);
+  writeln("");
 }
 
-export function attachApprovalSurfaces(rt: EditerRuntime, interactive: boolean): () => void {
+function hintMessage(text: string): string {
+  return styles.dim(text);
+}
+
+function interactiveApprovalBody(req: { id: string; summary: string }): string[] {
+  return [req.summary, styles.dim(`id=${req.id.slice(0, 8)}…`), styles.dim("(y/n in console)")];
+}
+
+export function attachApprovalSurfaces(rt: HandsRuntime, interactive: boolean): () => void {
   const unsubs: Array<() => void> = [];
   if (interactive) {
     unsubs.push(
       rt.approvals.addSurface((req) => {
-        console.log(`\n[approval] ${req.summary}\n  id=${req.id.slice(0, 8)}…  (y/n in console)\n`);
+        writeln("");
+        printBox("approval", interactiveApprovalBody(req));
+        writeln("");
       }),
     );
     return () => {
@@ -22,13 +38,25 @@ export function attachApprovalSurfaces(rt: EditerRuntime, interactive: boolean):
   if (process.env.EDITER_CONTROL_SURFACE === "http") {
     unsubs.push(
       rt.approvals.addSurface((req) => {
-        console.log(`\n[approval] ${req.summary}\n  id=${req.id}  (approve in MCP IDE or: editer review)\n`);
+        writeln("");
+        printBox("approval", [
+          req.summary,
+          styles.dim(`id=${req.id}`),
+          hintMessage("approve in MCP IDE or: hands review"),
+        ]);
+        writeln("");
       }),
     );
   } else if (!rt.headless && !interactive) {
     unsubs.push(
       rt.approvals.addSurface((req) => {
-        console.log(`\n[approval] ${req.summary}\n  id=${req.id}  (open the UI or: editer review)\n`);
+        writeln("");
+        printBox("approval", [
+          req.summary,
+          styles.dim(`id=${req.id}`),
+          hintMessage("open the UI or: hands review"),
+        ]);
+        writeln("");
       }),
     );
   } else if (rt.headless && process.stdin.isTTY) {

@@ -1,36 +1,7 @@
 #!/usr/bin/env node
-import { Command } from "commander";
-import { APP_VERSION } from "@editer/shared";
-import { registerInit } from "./commands/init.js";
-import { registerConfig } from "./commands/config.js";
-import { registerMode } from "./commands/mode.js";
-import { registerReview } from "./commands/review.js";
-import { registerWorkspace } from "./commands/workspace.js";
-import { registerDaemon, runDefaultSession, type StartOpts } from "./commands/daemon.js";
-import { registerTunnel } from "./commands/tunnel.js";
-import { registerConnect } from "./commands/connect.js";
-import { registerTool } from "./commands/tool.js";
-import { registerToken } from "./commands/token.js";
-
-const SUBCOMMANDS = new Set([
-  "init",
-  "start",
-  "stop",
-  "status",
-  "logs",
-  "config",
-  "mode",
-  "review",
-  "approvals",
-  "workspace",
-  "tunnel",
-  "connect",
-  "stdio",
-  "tool",
-  "token",
-  "auto",
-  "readonly",
-]);
+import { runDefaultSession, type StartOpts } from "./commands/daemon.js";
+import { createProgram } from "./program.js";
+import { SUBCOMMANDS } from "./subcommands.js";
 
 function parseDefaultSessionArgs(argv: string[]): { dir: string; opts: StartOpts } | null {
   if (argv.length === 0) {
@@ -74,21 +45,5 @@ if (defaultSession) {
   process.exit(0);
 }
 
-const program = new Command();
-program
-  .name("editer")
-  .description("Local coding-agent MCP daemon. Run `editer .` in a project to start.")
-  .version(APP_VERSION);
-
-registerInit(program);
-registerConfig(program);
-registerMode(program);
-registerReview(program);
-registerWorkspace(program);
-registerDaemon(program);
-registerTunnel(program);
-registerConnect(program);
-registerTool(program);
-registerToken(program);
-
+const program = createProgram();
 await program.parseAsync(process.argv);
